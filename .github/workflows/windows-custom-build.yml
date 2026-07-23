@@ -8,10 +8,8 @@ jobs:
     runs-on: windows-2022
 
     steps:
-      - name: Checkout AzerothCore
+      - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          repository: azerothcore/azerothcore-wotlk
 
       - name: Show tools
         shell: pwsh
