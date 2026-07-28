@@ -118,3 +118,9 @@ __pycache__/
 #  !modules/yourmodule
 #
 # ==================
+
+!modules/mod-arac/
+!modules/mod-aoe-loot/
+!modules/mod-flightmaster-whistle/
+!modules/mod-transmog-plus/
+!modules/mod-ale/
