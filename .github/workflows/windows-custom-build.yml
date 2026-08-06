@@ -72,9 +72,11 @@ jobs:
           mkdir repack/configs
           mkdir repack/database
 
-          # Copia Eseguibili e SQL base
-          copy build/bin/Release/*.exe repack/bin/
-          xcopy /E /I azerothcore/sql repack/sql/base/
+          # Copia Eseguibili
+          Copy-Item "build/bin/Release/*.exe" -Destination "repack/bin/"
+          
+          # Copia file SQL usando la sintassi nativa PowerShell per evitare errori di xcopy
+          Copy-Item -Path "azerothcore/sql/*" -Destination "repack/sql/base/" -Recurse -Force
 
       - name: Download and Setup Portable MariaDB
         shell: pwsh
@@ -86,7 +88,7 @@ jobs:
           
           mkdir temp_db
           Expand-Archive -Path $mariadbZip -DestinationPath temp_db
-          xcopy /E /I temp_db/mariadb-11.4.2-winx64/* repack/database/
+          Copy-Item -Path "temp_db/mariadb-11.4.2-winx64/*" -Destination "repack/database/" -Recurse -Force
           
           Remove-Item -Recurse -Force temp_db
           Remove-Item $mariadbZip
@@ -132,15 +134,15 @@ jobs:
       - name: Deploy DLLs (MySQL 8.0.46 & OpenSSL)
         shell: pwsh
         run: |
-          copy "${{ env.VCPKG_ROOT }}/installed/x64-windows/bin/libmysql.dll" repack/bin/
-          copy "${{ env.VCPKG_ROOT }}/installed/x64-windows/bin/libcrypto-*.dll" repack/bin/
-          copy "${{ env.VCPKG_ROOT }}/installed/x64-windows/bin/libssl-*.dll" repack/bin/
+          Copy-Item -Path "${{ env.VCPKG_ROOT }}/installed/x64-windows/bin/libmysql.dll" -Destination "repack/bin/"
+          Copy-Item -Path "${{ env.VCPKG_ROOT }}/installed/x64-windows/bin/libcrypto-*.dll" -Destination "repack/bin/"
+          Copy-Item -Path "${{ env.VCPKG_ROOT }}/installed/x64-windows/bin/libssl-*.dll" -Destination "repack/bin/"
 
       - name: Auto-Configure Config Files
         shell: pwsh
         run: |
-          copy repack/bin/worldserver.conf.dist repack/configs/worldserver.conf
-          copy repack/bin/authserver.conf.dist repack/configs/authserver.conf
+          Copy-Item -Path "repack/bin/worldserver.conf.dist" -Destination "repack/configs/worldserver.conf"
+          Copy-Item -Path "repack/bin/authserver.conf.dist" -Destination "repack/configs/authserver.conf"
 
           (Get-Content repack/configs/worldserver.conf) | ForEach-Object {
             $_ -replace '^DataDir\s*=.*', 'DataDir = "../data"' `
@@ -160,5 +162,8 @@ jobs:
       - name: Upload Repack Artifact
         uses: actions/upload-artifact@v4
         with:
+          name: AzerothCore-Windows-Repack
+          path: azerothcore-repack-windows.zip
+
           name: AzerothCore-Windows-Repack
           path: azerothcore-repack-windows.zip
