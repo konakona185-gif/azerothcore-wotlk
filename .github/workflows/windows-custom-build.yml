@@ -9,7 +9,6 @@ jobs:
 
     env:
       VCPKG_ROOT: 'C:\vcpkg'
-      MYSQL_VERSION: '8.0.46'
 
     steps:
       - name: Checkout AzerothCore (Official Master)
@@ -22,7 +21,7 @@ jobs:
           path: |
             ${{ env.VCPKG_ROOT }}
             ${{ github.workspace }}\AppData\Local\vcpkg\archives
-          key: ${{ runner.os }}-vcpkg-${{ hashFiles('vkg.json') }}
+          key: ${{ runner.os }}-vcpkg-${{ hashFiles('vcpkg.json') }}
           restore-keys: |
             ${{ runner.os }}-vcpkg-
 
@@ -30,7 +29,7 @@ jobs:
         if: steps.vcpkg-cache.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
-          git clone https://github.com/microsoft/vcpkg.git ${{ env.VCPKG_ROOT }}
+          git clone https://github.com ${{ env.VCPKG_ROOT }}
           & "${{ env.VCPKG_ROOT }}\bootstrap-vcpkg.bat"
 
       - name: Install Dependencies via vcpkg
@@ -71,50 +70,61 @@ jobs:
           # Copia Eseguibili
           Copy-Item "build/bin/Release/*.exe" -Destination "repack/bin/"
 
-      - name: Download and Setup Portable MySQL Server via Chocolatey
+      - name: Extract Portable Database Engine from System
         shell: pwsh
         run: |
-          Write-Host "Installazione di MySQL Server tramite Chocolatey..."
-          # choco scarica l'installer ufficiale in background
-          choco install mysql --version=8.0.36 -y --no-progress
-          
-          Write-Host "Strutturazione della cartella del database portatile..."
-          # Copiamo i file binari ufficiali appena installati nella nostra cartella repack
-          Copy-Item -Path "C:\Program Files\MySQL\MySQL Server 8.0\*" -Destination "repack/database/" -Recurse -Force
+          Write-Host "Configurazione del server database portatile tramite i file nativi di sistema..."
+          # Windows Server di GitHub ha già i file binari di MySQL/MariaDB integrati nel sistema. Li usiamo direttamente senza scaricare nulla.
+          if (Test-Path "C:\Program Files\MySQL") {
+              Copy-Item -Path "C:\Program Files\MySQL\**\*" -Destination "repack/database/" -Recurse -Force -ErrorAction SilentlyContinue
+          } elseif (Test-Path "C:\Program Files\MariaDB") {
+              Copy-Item -Path "C:\Program Files\MariaDB\**\*" -Destination "repack/database/" -Recurse -Force -ErrorAction SilentlyContinue
+          } else {
+              # Fallback di sicurezza su Chocolatey senza specificare la versione instabile
+              choco install mariadb -y --no-progress
+              Copy-Item -Path "C:\Program Files\MariaDB*\*" -Destination "repack/database/" -Recurse -Force -ErrorAction SilentlyContinue
+          }
           mkdir repack/database/data
 
-      - name: Initialize MySQL and Import AzerothCore SQL
+      - name: Initialize SQL Engine and Import AzerothCore Data
         shell: pwsh
         run: |
           cd repack/database
-          Write-Host "Inizializzazione dei dati di sicurezza di MySQL..."
-          & ".\bin\mysqld.exe" --initialize-insecure --datadir=.\data
           
-          Write-Host "Avvio temporaneo di MySQL in background per l'importazione..."
-          $dbProcess = Start-Process ".\bin\mysqld.exe" -ArgumentList "--datadir=.\data", "--skip-grant-tables", "--port=3306" -PassThru
+          # Trova l'eseguibile mysqld per l'inizializzazione locale delle cartelle
+          $mysqldPath = Get-ChildItem -Path . -Filter "mysqld.exe" -Recurse | Select-Object -First 1 -ExpandProperty FullName
+          $mysqlPath = Get-ChildItem -Path . -Filter "mysql.exe" -Recurse | Select-Object -First 1 -ExpandProperty FullName
+          $mysqladminPath = Get-ChildItem -Path . -Filter "mysqladmin.exe" -Recurse | Select-Object -First 1 -ExpandProperty FullName
+          
+          Write-Host "Inizializzazione del dizionario dei dati..."
+          if ($mysqldPath -match "mariadb") {
+              & (Get-ChildItem -Path . -Filter "mysql_install_db.exe" -Recurse | Select-Object -First 1 -ExpandProperty FullName) --datadir=.\data --password=""
+          } else {
+              & $mysqldPath --initialize-insecure --datadir=.\data
+          }
+          
+          Write-Host "Avvio dell'istanza in background sulla porta locale 3306..."
+          $dbProcess = Start-Process $mysqldPath -ArgumentList "--datadir=.\data", "--skip-grant-tables", "--port=3306" -PassThru
           Start-Sleep -Seconds 8
           
-          & ".\bin\mysql.exe" --port=3306 --user=root -e "CREATE DATABASE IF NOT EXISTS acore_auth; CREATE DATABASE IF NOT EXISTS acore_characters; CREATE DATABASE IF NOT EXISTS acore_world;"
+          & $mysqlPath --port=3306 -e "CREATE DATABASE IF NOT EXISTS acore_auth; CREATE DATABASE IF NOT EXISTS acore_characters; CREATE DATABASE IF NOT EXISTS acore_world;"
           
-          Write-Host "Download degli schemi SQL base..."
+          Write-Host "Download degli schemi SQL ufficiali di AzerothCore..."
           Invoke-WebRequest -Uri "https://githubusercontent.com" -OutFile "auth_database.sql"
           Invoke-WebRequest -Uri "https://githubusercontent.com" -OutFile "characters_database.sql"
           
-          Write-Host "Importazione tabelle Auth e Characters..."
-          & ".\bin\mysql.exe" --port=3306 --user=root acore_auth < auth_database.sql
-          & ".\bin\mysql.exe" --port=3306 --user=root acore_characters < characters_database.sql
+          & $mysqlPath --port=3306 acore_auth < auth_database.sql
+          & $mysqlPath --port=3306 acore_characters < characters_database.sql
           
           Write-Host "Download del database acore_world completo..."
           $worldDbUrl = "https://github.com"
           Invoke-WebRequest -Uri $worldDbUrl -OutFile "world.zip"
           
           7z.exe x world.zip -y
-          
-          Write-Host "Importazione del database acore_world..."
-          & ".\bin\mysql.exe" --port=3306 --user=root acore_world < custom_world_database.sql
+          & $mysqlPath --port=3306 acore_world < custom_world_database.sql
 
-          # Spegnimento controllato del database temporaneo
-          & ".\bin\mysqladmin.exe" --port=3306 --user=root shutdown
+          Write-Host "Spegnimento controllato del processo temporaneo..."
+          & $mysqladminPath --port=3306 shutdown
           if (!$dbProcess.HasExited) { Stop-Process -Id $dbProcess.Id -Force }
 
       - name: Download and Extract Client Data (DBC, Maps, VMaps, MMaps)
@@ -124,12 +134,12 @@ jobs:
           $output = "repack/data/data.zip"
           Invoke-WebRequest -Uri $url -OutFile $output
           
-          Write-Host "Estrazione delle mappe di gioco..."
+          Write-Host "Estrazione delle mappe di gioco tramite 7-Zip..."
           7z.exe x $output -orepack/data/ -y
           
           Remove-Item $output
 
-      - name: Deploy DLLs (MySQL 8.0.46 & OpenSSL)
+      - name: Deploy DLLs (MySQL & OpenSSL)
         shell: pwsh
         run: |
           Copy-Item -Path "${{ env.VCPKG_ROOT }}/installed/x64-windows/bin/libmysql.dll" -Destination "repack/bin/"
