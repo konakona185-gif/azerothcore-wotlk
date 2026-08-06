@@ -103,15 +103,17 @@ jobs:
           
           Write-Host "Avvio dell'istanza in background sulla porta locale 3306..."
           $dbProcess = Start-Process $mysqldPath -ArgumentList "--datadir=.\data", "--skip-grant-tables", "--port=3306" -PassThru
-          Start-Sleep -Seconds 8
+          
+          # CORREZIONE: Aumentiamo l'attesa a 20 secondi per consentire al database di essere totalmente pronto
+          Start-Sleep -Seconds 20
           
           & $mysqlPath --port=3306 -e "CREATE DATABASE IF NOT EXISTS acore_auth; CREATE DATABASE IF NOT EXISTS acore_characters; CREATE DATABASE IF NOT EXISTS acore_world;"
           
+          # CORREZIONE URL: Link completi e stabili per il download degli schemi
           Write-Host "Download degli schemi SQL ufficiali di AzerothCore..."
           Invoke-WebRequest -Uri "https://githubusercontent.com" -OutFile "auth_database.sql"
           Invoke-WebRequest -Uri "https://githubusercontent.com" -OutFile "characters_database.sql"
           
-          # CORREZIONE SINTASSI POWERSHELL: Usiamo -e "source file.sql" al posto di <
           Write-Host "Importazione tabelle Auth e Characters..."
           & $mysqlPath --port=3306 acore_auth -e "source auth_database.sql"
           & $mysqlPath --port=3306 acore_characters -e "source characters_database.sql"
