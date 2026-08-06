@@ -80,7 +80,10 @@ jobs:
           Invoke-WebRequest -Uri $mariadbUrl -OutFile $mariadbZip
           
           mkdir temp_db
-          Expand-Archive -Path $mariadbZip -DestinationPath temp_db
+          Write-Host "Estrazione di MariaDB tramite utilità nativa..."
+          # Usiamo tar.exe nativo di Windows, estremamente stabile e leggero sulla memoria
+          tar.exe -xf $mariadbZip -C temp_db
+          
           Copy-Item -Path "temp_db/mariadb-11.4.2-winx64/*" -Destination "repack/database/" -Recurse -Force
           
           Remove-Item -Recurse -Force temp_db
@@ -98,8 +101,7 @@ jobs:
           
           & ".\bin\mysql.exe" --port=3306 -e "CREATE DATABASE IF NOT EXISTS acore_auth; CREATE DATABASE IF NOT EXISTS acore_characters; CREATE DATABASE IF NOT EXISTS acore_world;"
           
-          # RISOLUZIONE DEFINITIVA: Scarichiamo direttamente gli schemi SQL ufficiali di AzerothCore dal loro repository per evitare problemi di cartelle locali
-          Write-Host "Download degli schemi SQL base (Auth e Characters)..."
+          Write-Host "Download degli schemi SQL base..."
           Invoke-WebRequest -Uri "https://githubusercontent.com" -OutFile "auth_database.sql"
           Invoke-WebRequest -Uri "https://githubusercontent.com" -OutFile "characters_database.sql"
           
@@ -107,11 +109,12 @@ jobs:
           & ".\bin\mysql.exe" --port=3306 acore_auth < auth_database.sql
           & ".\bin\mysql.exe" --port=3306 acore_characters < characters_database.sql
           
-          # Download e importazione del database World pre-compilato ufficiale
           Write-Host "Download del database acore_world completo..."
           $worldDbUrl = "https://github.com"
           Invoke-WebRequest -Uri $worldDbUrl -OutFile "world.zip"
-          Expand-Archive -Path "world.zip" -DestinationPath "."
+          
+          # Usiamo tar.exe anche qui per estrarre il database del mondo in totale sicurezza
+          tar.exe -xf world.zip
           
           Write-Host "Importazione del database acore_world..."
           & ".\bin\mysql.exe" --port=3306 acore_world < custom_world_database.sql
@@ -126,7 +129,11 @@ jobs:
           $url = "https://github.com"
           $output = "repack/data/data.zip"
           Invoke-WebRequest -Uri $url -OutFile $output
-          Expand-Archive -Path $output -DestinationPath repack/data/
+          
+          Write-Host "Estrazione delle mappe di gioco tramite utilità nativa..."
+          # Usiamo tar.exe per estrarre il gigabyte di mappe senza mandare in crash la memoria
+          tar.exe -xf $output -C repack/data/
+          
           Remove-Item $output
 
       - name: Deploy DLLs (MySQL 8.0.46 & OpenSSL)
