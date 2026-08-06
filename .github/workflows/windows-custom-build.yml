@@ -1,4 +1,4 @@
-name: Windows Custom Build
+name: AzerothCore Windows Repack CI
 
 on:
   workflow_dispatch:
@@ -40,7 +40,7 @@ jobs:
       - name: Install Dependencies via vcpkg
         shell: pwsh
         run: |
-          & "${{ env.VCPKG_ROOT }}\vcpkg" install boost-system:x64-windows boost-filesystem:x64-windows boost-program-options:x64-windows boost-iostreams:x64-windows openssl:x64-windows libmysql:x64-windows readline:x64-windows
+          & "${{ env.VCPKG_ROOT }}\vcpkg" install boost:x64-windows openssl:x64-windows libmysql:x64-windows readline:x64-windows
 
       - name: Configure CMake (Core & Tools)
         shell: pwsh
