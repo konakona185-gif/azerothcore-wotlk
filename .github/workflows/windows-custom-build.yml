@@ -17,7 +17,7 @@ jobs:
         with:
           repository: 'azerothcore/azerothcore-wotlk'
           ref: 'master'
-          path: 'azerothcore'
+          path: '.' # FONDAMENTALE: Scarica direttamente nella root per coerenza con la build
 
       - name: Setup vcpkg and Cache
         uses: actions/cache@v4
@@ -26,7 +26,7 @@ jobs:
           path: |
             ${{ env.VCPKG_ROOT }}
             ${{ github.workspace }}\AppData\Local\vcpkg\archives
-          key: ${{ runner.os }}-vcpkg-${{ hashFiles('azerothcore/vcpkg.json') }}
+          key: ${{ runner.os }}-vcpkg-${{ hashFiles('vcpkg.json') }}
           restore-keys: |
             ${{ runner.os }}-vcpkg-
 
@@ -47,7 +47,7 @@ jobs:
         run: |
           mkdir build
           cd build
-          cmake ../azerothcore `
+          cmake .. `
             -A x64 `
             -DCMAKE_BUILD_TYPE=Release `
             -DTOOLS_BUILD=all `
@@ -75,8 +75,8 @@ jobs:
           # Copia Eseguibili
           Copy-Item "build/bin/Release/*.exe" -Destination "repack/bin/"
           
-          # Copia file SQL usando la sintassi nativa PowerShell per evitare errori di xcopy
-          Copy-Item -Path "azerothcore/sql/*" -Destination "repack/sql/base/" -Recurse -Force
+          # CORREZIONE: Copia i file SQL dalla cartella corretta della root
+          Copy-Item -Path "sql/*" -Destination "repack/sql/base/" -Recurse -Force
 
       - name: Download and Setup Portable MariaDB
         shell: pwsh
@@ -164,3 +164,4 @@ jobs:
         with:
           name: AzerothCore-Windows-Repack
           path: azerothcore-repack-windows.zip
+
