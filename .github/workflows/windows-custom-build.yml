@@ -1,4 +1,4 @@
-name: AzerothCore Windows Repack CI
+name: windows custom build
 
 on:
   workflow_dispatch:
@@ -162,4 +162,3 @@ jobs:
         with:
           name: AzerothCore-Windows-Repack
           path: azerothcore-repack-windows.zip
-
