@@ -14,7 +14,6 @@ jobs:
     steps:
       - name: Checkout AzerothCore (Official Master)
         uses: actions/checkout@v4
-        # CORREZIONE FONDAMENTALE: Rimosso il path. Ora scarica nella cartella di lavoro standard.
 
       - name: Setup vcpkg and Cache
         uses: actions/cache@v4
@@ -71,9 +70,6 @@ jobs:
 
           # Copia Eseguibili
           Copy-Item "build/bin/Release/*.exe" -Destination "repack/bin/"
-          
-          # Copia i file SQL dalla cartella nativa
-          Copy-Item -Path "sql/*" -Destination "repack/sql/base/" -Recurse -Force
 
       - name: Download and Setup Portable MariaDB
         shell: pwsh
@@ -102,18 +98,23 @@ jobs:
           
           & ".\bin\mysql.exe" --port=3306 -e "CREATE DATABASE IF NOT EXISTS acore_auth; CREATE DATABASE IF NOT EXISTS acore_characters; CREATE DATABASE IF NOT EXISTS acore_world;"
           
-          # Importazione tabelle di base Auth e Characters (punti corretti sul repack strutturato)
-          & ".\bin\mysql.exe" --port=3306 acore_auth < ../sql/base/base/auth_database.sql
-          & ".\bin\mysql.exe" --port=3306 acore_characters < ../sql/base/base/characters_database.sql
+          # RISOLUZIONE DEFINITIVA: Scarichiamo direttamente gli schemi SQL ufficiali di AzerothCore dal loro repository per evitare problemi di cartelle locali
+          Write-Host "Download degli schemi SQL base (Auth e Characters)..."
+          Invoke-WebRequest -Uri "https://githubusercontent.com" -OutFile "auth_database.sql"
+          Invoke-WebRequest -Uri "https://githubusercontent.com" -OutFile "characters_database.sql"
+          
+          Write-Host "Importazione tabelle Auth e Characters..."
+          & ".\bin\mysql.exe" --port=3306 acore_auth < auth_database.sql
+          & ".\bin\mysql.exe" --port=3306 acore_characters < characters_database.sql
           
           # Download e importazione del database World pre-compilato ufficiale
           Write-Host "Download del database acore_world completo..."
           $worldDbUrl = "https://github.com"
-          Invoke-WebRequest -Uri $worldDbUrl -OutFile "../sql/world.zip"
-          Expand-Archive -Path "../sql/world.zip" -DestinationPath "../sql/"
+          Invoke-WebRequest -Uri $worldDbUrl -OutFile "world.zip"
+          Expand-Archive -Path "world.zip" -DestinationPath "."
           
           Write-Host "Importazione del database acore_world..."
-          & ".\bin\mysql.exe" --port=3306 acore_world < ../sql/custom_world_database.sql
+          & ".\bin\mysql.exe" --port=3306 acore_world < custom_world_database.sql
 
           # Spegnimento controllato del database temporaneo
           & ".\bin\mysqladmin.exe" --port=3306 shutdown
