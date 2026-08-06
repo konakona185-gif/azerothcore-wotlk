@@ -80,9 +80,9 @@ jobs:
           Invoke-WebRequest -Uri $mariadbUrl -OutFile $mariadbZip
           
           mkdir temp_db
-          Write-Host "Estrazione di MariaDB tramite utilità nativa..."
-          # Usiamo tar.exe nativo di Windows, estremamente stabile e leggero sulla memoria
-          tar.exe -xf $mariadbZip -C temp_db
+          Write-Host "Estrazione di MariaDB tramite 7-Zip..."
+          # Usiamo l'eseguibile nativo 7z preinstallato su GitHub Actions: ultra-veloce, leggero ed esente da errori di formato
+          7z.exe x $mariadbZip -otemp_db -y
           
           Copy-Item -Path "temp_db/mariadb-11.4.2-winx64/*" -Destination "repack/database/" -Recurse -Force
           
@@ -113,8 +113,8 @@ jobs:
           $worldDbUrl = "https://github.com"
           Invoke-WebRequest -Uri $worldDbUrl -OutFile "world.zip"
           
-          # Usiamo tar.exe anche qui per estrarre il database del mondo in totale sicurezza
-          tar.exe -xf world.zip
+          # Usiamo 7z.exe per estrarre in totale sicurezza il database del mondo
+          7z.exe x world.zip -y
           
           Write-Host "Importazione del database acore_world..."
           & ".\bin\mysql.exe" --port=3306 acore_world < custom_world_database.sql
@@ -130,9 +130,9 @@ jobs:
           $output = "repack/data/data.zip"
           Invoke-WebRequest -Uri $url -OutFile $output
           
-          Write-Host "Estrazione delle mappe di gioco tramite utilità nativa..."
-          # Usiamo tar.exe per estrarre il gigabyte di mappe senza mandare in crash la memoria
-          tar.exe -xf $output -C repack/data/
+          Write-Host "Estrazione delle mappe di gioco tramite 7-Zip..."
+          # Usiamo 7z.exe per estrarre l'archivio pesante delle mappe senza mandare in crash la memoria
+          7z.exe x $output -orepack/data/ -y
           
           Remove-Item $output
 
