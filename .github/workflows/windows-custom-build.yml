@@ -7,35 +7,22 @@ jobs:
   build:
     runs-on: windows-2022
 
-    env:
-      VCPKG_ROOT: 'C:\vcpkg'
-
     steps:
       - name: Checkout AzerothCore (Official Master)
         uses: actions/checkout@v4
 
-      - name: Setup vcpkg and Cache
-        uses: actions/cache@v4
-        id: vcpkg-cache
-        with:
-          path: |
-            ${{ env.VCPKG_ROOT }}
-            ${{ github.workspace }}\AppData\Local\vcpkg\archives
-          key: ${{ runner.os }}-vcpkg-${{ hashFiles('vcpkg.json') }}
-          restore-keys: |
-            ${{ runner.os }}-vcpkg-
-
-      - name: Install vcpkg (if not cached)
-        if: steps.vcpkg-cache.outputs.cache-hit != 'true'
+      - name: Install Dependencies via Chocolatey
         shell: pwsh
         run: |
-          git clone https://github.com ${{ env.VCPKG_ROOT }}
-          & "${{ env.VCPKG_ROOT }}\bootstrap-vcpkg.bat"
-
-      - name: Install Dependencies via vcpkg
-        shell: pwsh
-        run: |
-          & "${{ env.VCPKG_ROOT }}\vcpkg" install boost:x64-windows openssl:x64-windows libmysql:x64-windows readline:x64-windows
+          Write-Host "Installazione rapida delle dipendenze ufficiali..."
+          # Scarica i pacchetti pre-compilati stabili
+          choco install boost-msvc-14.3 -y --no-progress
+          choco install openssl -y --no-progress
+          choco install mysql-connector-cpp -y --no-progress
+          
+          # Configura le variabili d'ambiente per CMake
+          echo "BOOST_ROOT=C:\local\boost_1_83_0" >> $env:GITHUB_ENV
+          echo "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL-Win64" >> $env:GITHUB_ENV
 
       - name: Configure CMake (Core & Tools)
         shell: pwsh
@@ -46,9 +33,7 @@ jobs:
             -A x64 `
             -DCMAKE_BUILD_TYPE=Release `
             -DTOOLS_BUILD=all `
-            -DSERVERS_BUILD=all `
-            -DCMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake" `
-            -DVCPKG_TARGET_TRIPLET=x64-windows
+            -DSERVERS_BUILD=all
 
       - name: Build Core and Tools
         shell: pwsh
@@ -89,7 +74,6 @@ jobs:
         run: |
           cd repack/database
           
-          # Trova gli eseguibili principali
           $mysqldPath = Get-ChildItem -Path . -Filter "mysqld.exe" -Recurse | Select-Object -First 1 -ExpandProperty FullName
           $mysqlPath = Get-ChildItem -Path . -Filter "mysql.exe" -Recurse | Select-Object -First 1 -ExpandProperty FullName
           $mysqladminPath = Get-ChildItem -Path . -Filter "mysqladmin.exe" -Recurse | Select-Object -First 1 -ExpandProperty FullName
@@ -101,22 +85,21 @@ jobs:
               & $mysqldPath --initialize-insecure --datadir=.\data
           }
           
-          Write-Host "Avvio dell'istanza in background sulla porta libera 3307..."
-          $dbProcess = Start-Process $mysqldPath -ArgumentList "--datadir=.\data", "--skip-grant-tables", "--port=3307" -PassThru
+          # CONFIGURAZIONE PORTA 3306: Avviamo sulla porta standard
+          Write-Host "Avvio dell'istanza in background sulla porta standard 3306..."
+          $dbProcess = Start-Process $mysqldPath -ArgumentList "--datadir=.\data", "--skip-grant-tables", "--port=3306" -PassThru
           
-          # Attesa estesa a 25 secondi per massima sicurezza
           Start-Sleep -Seconds 25
           
-          & $mysqlPath --port=3307 -e "CREATE DATABASE IF NOT EXISTS acore_auth; CREATE DATABASE IF NOT EXISTS acore_characters; CREATE DATABASE IF NOT EXISTS acore_world;"
+          & $mysqlPath --port=3306 -e "CREATE DATABASE IF NOT EXISTS acore_auth; CREATE DATABASE IF NOT EXISTS acore_characters; CREATE DATABASE IF NOT EXISTS acore_world;"
           
-          # URL CORRETTI E VERIFICATI AL 100%
           Write-Host "Download degli schemi SQL ufficiali di AzerothCore..."
           Invoke-WebRequest -Uri "https://githubusercontent.com" -OutFile "auth_database.sql"
           Invoke-WebRequest -Uri "https://githubusercontent.com" -OutFile "characters_database.sql"
           
           Write-Host "Importazione tabelle Auth e Characters..."
-          & $mysqlPath --port=3307 acore_auth -e "source auth_database.sql"
-          & $mysqlPath --port=3307 acore_characters -e "source characters_database.sql"
+          & $mysqlPath --port=3306 acore_auth -e "source auth_database.sql"
+          & $mysqlPath --port=3306 acore_characters -e "source characters_database.sql"
           
           Write-Host "Download del database acore_world completo..."
           $worldDbUrl = "https://github.com"
@@ -125,10 +108,10 @@ jobs:
           7z.exe x world.zip -y
           
           Write-Host "Importazione del database acore_world..."
-          & $mysqlPath --port=3307 acore_world -e "source custom_world_database.sql"
+          & $mysqlPath --port=3306 acore_world -e "source custom_world_database.sql"
 
           Write-Host "Spegnimento controllato del processo temporaneo..."
-          & $mysqladminPath --port=3307 shutdown
+          & $mysqladminPath --port=3306 shutdown
           if (!$dbProcess.HasExited) { Stop-Process -Id $dbProcess.Id -Force }
 
       - name: Download and Extract Client Data (DBC, Maps, VMaps, MMaps)
@@ -146,9 +129,10 @@ jobs:
       - name: Deploy DLLs (MySQL & OpenSSL)
         shell: pwsh
         run: |
-          Copy-Item -Path "${{ env.VCPKG_ROOT }}/installed/x64-windows/bin/libmysql.dll" -Destination "repack/bin/"
-          Copy-Item -Path "${{ env.VCPKG_ROOT }}/installed/x64-windows/bin/libcrypto-*.dll" -Destination "repack/bin/"
-          Copy-Item -Path "${{ env.VCPKG_ROOT }}/installed/x64-windows/bin/libssl-*.dll" -Destination "repack/bin/"
+          Copy-Item -Path "C:\Program Files\OpenSSL-Win64\bin\libcrypto-*.dll" -Destination "repack/bin/" -ErrorAction SilentlyContinue
+          Copy-Item -Path "C:\Program Files\OpenSSL-Win64\bin\libssl-*.dll" -Destination "repack/bin/" -ErrorAction SilentlyContinue
+          $mysqlDll = Get-ChildItem -Path "C:\Program Files\" -Filter "libmysql.dll" -Recurse | Select-Object -First 1 -ExpandProperty FullName
+          if ($mysqlDll) { Copy-Item -Path $mysqlDll -Destination "repack/bin/" }
 
       - name: Auto-Configure Config Files
         shell: pwsh
