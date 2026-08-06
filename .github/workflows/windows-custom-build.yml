@@ -36,7 +36,8 @@ jobs:
       - name: Install Dependencies via vcpkg
         shell: pwsh
         run: |
-          & "${{ env.VCPKG_ROOT }}\vcpkg" install boost:x64-windows openssl:x64-windows libmysql:x64-windows readline:x64-windows
+          # Aggiunto mysql server direttamente dalle dipendenze vcpkg blindate
+          & "${{ env.VCPKG_ROOT }}\vcpkg" install boost:x64-windows openssl:x64-windows libmysql:x64-windows readline:x64-windows mysql:x64-windows
 
       - name: Configure CMake (Core & Tools)
         shell: pwsh
@@ -71,56 +72,46 @@ jobs:
           # Copia Eseguibili
           Copy-Item "build/bin/Release/*.exe" -Destination "repack/bin/"
 
-      - name: Download and Setup Portable MariaDB
+      - name: Setup Portable MySQL Server
         shell: pwsh
         run: |
-          Write-Host "Download di MariaDB portatile..."
-          $mariadbUrl = "https://mariadb.com"
-          $mariadbZip = "mariadb-portable.zip"
-          Invoke-WebRequest -Uri $mariadbUrl -OutFile $mariadbZip
-          
-          mkdir temp_db
-          Write-Host "Estrazione di MariaDB tramite 7-Zip..."
-          # Usiamo l'eseguibile nativo 7z preinstallato su GitHub Actions: ultra-veloce, leggero ed esente da errori di formato
-          7z.exe x $mariadbZip -otemp_db -y
-          
-          Copy-Item -Path "temp_db/mariadb-11.4.2-winx64/*" -Destination "repack/database/" -Recurse -Force
-          
-          Remove-Item -Recurse -Force temp_db
-          Remove-Item $mariadbZip
+          Write-Host "Strutturazione del server MySQL portatile da vcpkg..."
+          # Copia i file binari di MySQL server installati in sicurezza da vcpkg nella cartella del repack
+          Copy-Item -Path "${{ env.VCPKG_ROOT }}/installed/x64-windows/tools/mysql/*" -Destination "repack/database/" -Recurse -Force
+          mkdir repack/database/data
 
-      - name: Initialize MariaDB and Import AzerothCore SQL
+      - name: Initialize MySQL and Import AzerothCore SQL
         shell: pwsh
         run: |
           cd repack/database
-          & ".\bin\mysql_install_db.exe" --datadir=.\data --password=""
+          Write-Host "Inizializzazione dei dati di sicurezza di MySQL..."
+          & ".\bin\mysqld.exe" --initialize-insecure --datadir=.\data
           
-          # Avvio temporaneo per importazione delle tabelle base
+          Write-Host "Avvio temporaneo di MySQL in background per l'importazione..."
           $dbProcess = Start-Process ".\bin\mysqld.exe" -ArgumentList "--datadir=.\data", "--skip-grant-tables", "--port=3306" -PassThru
-          Start-Sleep -Seconds 5
+          Start-Sleep -Seconds 8
           
-          & ".\bin\mysql.exe" --port=3306 -e "CREATE DATABASE IF NOT EXISTS acore_auth; CREATE DATABASE IF NOT EXISTS acore_characters; CREATE DATABASE IF NOT EXISTS acore_world;"
+          & ".\bin\mysql.exe" --port=3306 --user=root -e "CREATE DATABASE IF NOT EXISTS acore_auth; CREATE DATABASE IF NOT EXISTS acore_characters; CREATE DATABASE IF NOT EXISTS acore_world;"
           
           Write-Host "Download degli schemi SQL base..."
           Invoke-WebRequest -Uri "https://githubusercontent.com" -OutFile "auth_database.sql"
           Invoke-WebRequest -Uri "https://githubusercontent.com" -OutFile "characters_database.sql"
           
           Write-Host "Importazione tabelle Auth e Characters..."
-          & ".\bin\mysql.exe" --port=3306 acore_auth < auth_database.sql
-          & ".\bin\mysql.exe" --port=3306 acore_characters < characters_database.sql
+          & ".\bin\mysql.exe" --port=3306 --user=root acore_auth < auth_database.sql
+          & ".\bin\mysql.exe" --port=3306 --user=root acore_characters < characters_database.sql
           
           Write-Host "Download del database acore_world completo..."
           $worldDbUrl = "https://github.com"
           Invoke-WebRequest -Uri $worldDbUrl -OutFile "world.zip"
           
-          # Usiamo 7z.exe per estrarre in totale sicurezza il database del mondo
           7z.exe x world.zip -y
           
           Write-Host "Importazione del database acore_world..."
-          & ".\bin\mysql.exe" --port=3306 acore_world < custom_world_database.sql
+          & ".\bin\mysql.exe" --port=3306 --user=root acore_world < custom_world_database.sql
 
           # Spegnimento controllato del database temporaneo
-          & ".\bin\mysqladmin.exe" --port=3306 shutdown
+          & ".\bin\mysqladmin.exe" --port=3306 --user=root shutdown
           if (!$dbProcess.HasExited) { Stop-Process -Id $dbProcess.Id -Force }
 
       - name: Download and Extract Client Data (DBC, Maps, VMaps, MMaps)
@@ -130,8 +121,7 @@ jobs:
           $output = "repack/data/data.zip"
           Invoke-WebRequest -Uri $url -OutFile $output
           
-          Write-Host "Estrazione delle mappe di gioco tramite 7-Zip..."
-          # Usiamo 7z.exe per estrarre l'archivio pesante delle mappe senza mandare in crash la memoria
+          Write-Host "Estrazione delle mappe di gioco..."
           7z.exe x $output -orepack/data/ -y
           
           Remove-Item $output
@@ -169,3 +159,4 @@ jobs:
         with:
           name: AzerothCore-Windows-Repack
           path: azerothcore-repack-windows.zip
+
