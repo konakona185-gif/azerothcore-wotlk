@@ -22,7 +22,7 @@ jobs:
           path: |
             ${{ env.VCPKG_ROOT }}
             ${{ github.workspace }}\AppData\Local\vcpkg\archives
-          key: ${{ runner.os }}-vcpkg-${{ hashFiles('vcpkg.json') }}
+          key: ${{ runner.os }}-vcpkg-${{ hashFiles('vkg.json') }}
           restore-keys: |
             ${{ runner.os }}-vcpkg-
 
@@ -30,14 +30,13 @@ jobs:
         if: steps.vcpkg-cache.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
-          git clone https://github.com ${{ env.VCPKG_ROOT }}
+          git clone https://github.com/microsoft/vcpkg.git ${{ env.VCPKG_ROOT }}
           & "${{ env.VCPKG_ROOT }}\bootstrap-vcpkg.bat"
 
       - name: Install Dependencies via vcpkg
         shell: pwsh
         run: |
-          # Aggiunto mysql server direttamente dalle dipendenze vcpkg blindate
-          & "${{ env.VCPKG_ROOT }}\vcpkg" install boost:x64-windows openssl:x64-windows libmysql:x64-windows readline:x64-windows mysql:x64-windows
+          & "${{ env.VCPKG_ROOT }}\vcpkg" install boost:x64-windows openssl:x64-windows libmysql:x64-windows readline:x64-windows
 
       - name: Configure CMake (Core & Tools)
         shell: pwsh
@@ -72,12 +71,16 @@ jobs:
           # Copia Eseguibili
           Copy-Item "build/bin/Release/*.exe" -Destination "repack/bin/"
 
-      - name: Setup Portable MySQL Server
+      - name: Download and Setup Portable MySQL Server via Chocolatey
         shell: pwsh
         run: |
-          Write-Host "Strutturazione del server MySQL portatile da vcpkg..."
-          # Copia i file binari di MySQL server installati in sicurezza da vcpkg nella cartella del repack
-          Copy-Item -Path "${{ env.VCPKG_ROOT }}/installed/x64-windows/tools/mysql/*" -Destination "repack/database/" -Recurse -Force
+          Write-Host "Installazione di MySQL Server tramite Chocolatey..."
+          # choco scarica l'installer ufficiale in background
+          choco install mysql --version=8.0.36 -y --no-progress
+          
+          Write-Host "Strutturazione della cartella del database portatile..."
+          # Copiamo i file binari ufficiali appena installati nella nostra cartella repack
+          Copy-Item -Path "C:\Program Files\MySQL\MySQL Server 8.0\*" -Destination "repack/database/" -Recurse -Force
           mkdir repack/database/data
 
       - name: Initialize MySQL and Import AzerothCore SQL
@@ -159,4 +162,3 @@ jobs:
         with:
           name: AzerothCore-Windows-Repack
           path: azerothcore-repack-windows.zip
-
