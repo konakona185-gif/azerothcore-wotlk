@@ -7,46 +7,159 @@ jobs:
   build:
     runs-on: windows-2022
 
+    env:
+      VCPKG_ROOT: 'C:\vcpkg'
+      MYSQL_VERSION: '8.0.46'
+
     steps:
-      - name: Checkout Repository
+      - name: Checkout AzerothCore (Official Master)
         uses: actions/checkout@v4
+        with:
+          repository: 'azerothcore/azerothcore-wotlk'
+          ref: 'master'
+          path: 'azerothcore'
 
-      - name: Show tools
+      - name: Setup vcpkg and Cache
+        uses: actions/cache@v4
+        id: vcpkg-cache
+        with:
+          path: |
+            ${{ env.VCPKG_ROOT }}
+            ${{ github.workspace }}\AppData\Local\vcpkg\archives
+          key: ${{ runner.os }}-vcpkg-${{ hashFiles('azerothcore/vcpkg.json') }}
+          restore-keys: |
+            ${{ runner.os }}-vcpkg-
+
+      - name: Install vcpkg (if not cached)
+        if: steps.vcpkg-cache.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
-          cmake --version
-          git --version
+          git clone https://github.com ${{ env.VCPKG_ROOT }}
+          & "${{ env.VCPKG_ROOT }}\bootstrap-vcpkg.bat"
 
-      - name: Install vcpkg
+      - name: Install Dependencies via vcpkg
         shell: pwsh
         run: |
-          git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
-          C:\vcpkg\bootstrap-vcpkg.bat
+          & "${{ env.VCPKG_ROOT }}\vcpkg" install boost-system:x64-windows boost-filesystem:x64-windows boost-program-options:x64-windows boost-iostreams:x64-windows openssl:x64-windows libmysql:x64-windows readline:x64-windows
 
-      - name: Install Boost
-        shell: pwsh
-        run: |
-          C:\vcpkg\vcpkg install boost:x64-windows
-
-      - name: Configure
+      - name: Configure CMake (Core & Tools)
         shell: pwsh
         run: |
           mkdir build
           cd build
-          cmake .. `
+          cmake ../azerothcore `
             -A x64 `
-            -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DTOOLS_BUILD=all `
+            -DSERVERS_BUILD=all `
+            -DCMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake" `
             -DVCPKG_TARGET_TRIPLET=x64-windows
 
-      - name: Build
+      - name: Build Core and Tools
         shell: pwsh
         run: |
           cd build
-          cmake --build . --config Release
+          cmake --build . --config Release --parallel 4
 
-      - name: Upload Artifact
-        if: always()
+      - name: Structure Repack Folder
+        shell: pwsh
+        run: |
+          mkdir repack
+          mkdir repack/bin
+          mkdir repack/data
+          mkdir repack/sql
+          mkdir repack/sql/base
+          mkdir repack/configs
+          mkdir repack/database
+
+          # Copia Eseguibili e SQL base
+          copy build/bin/Release/*.exe repack/bin/
+          xcopy /E /I azerothcore/sql repack/sql/base/
+
+      - name: Download and Setup Portable MariaDB
+        shell: pwsh
+        run: |
+          Write-Host "Download di MariaDB portatile..."
+          $mariadbUrl = "https://mariadb.com"
+          $mariadbZip = "mariadb-portable.zip"
+          Invoke-WebRequest -Uri $mariadbUrl -OutFile $mariadbZip
+          
+          mkdir temp_db
+          Expand-Archive -Path $mariadbZip -DestinationPath temp_db
+          xcopy /E /I temp_db/mariadb-11.4.2-winx64/* repack/database/
+          
+          Remove-Item -Recurse -Force temp_db
+          Remove-Item $mariadbZip
+
+      - name: Initialize MariaDB and Import AzerothCore SQL
+        shell: pwsh
+        run: |
+          cd repack/database
+          & ".\bin\mysql_install_db.exe" --datadir=.\data --password=""
+          
+          # Avvio temporaneo per importazione delle tabelle base
+          $dbProcess = Start-Process ".\bin\mysqld.exe" -ArgumentList "--datadir=.\data", "--skip-grant-tables", "--port=3306" -PassThru
+          Start-Sleep -Seconds 5
+          
+          & ".\bin\mysql.exe" --port=3306 -e "CREATE DATABASE IF NOT EXISTS acore_auth; CREATE DATABASE IF NOT EXISTS acore_characters; CREATE DATABASE IF NOT EXISTS acore_world;"
+          
+          # Importazione tabelle di base Auth e Characters
+          & ".\bin\mysql.exe" --port=3306 acore_auth < ../sql/base/base/auth_database.sql
+          & ".\bin\mysql.exe" --port=3306 acore_characters < ../sql/base/base/characters_database.sql
+          
+          # Download e importazione del database World pre-compilato ufficiale
+          Write-Host "Download del database acore_world completo..."
+          $worldDbUrl = "https://github.com"
+          Invoke-WebRequest -Uri $worldDbUrl -OutFile "../sql/world.zip"
+          Expand-Archive -Path "../sql/world.zip" -DestinationPath "../sql/"
+          
+          Write-Host "Importazione del database acore_world..."
+          & ".\bin\mysql.exe" --port=3306 acore_world < ../sql/custom_world_database.sql
+
+          # Spegnimento controllato del database temporaneo
+          & ".\bin\mysqladmin.exe" --port=3306 shutdown
+          if (!$dbProcess.HasExited) { Stop-Process -Id $dbProcess.Id -Force }
+
+      - name: Download and Extract Client Data (DBC, Maps, VMaps, MMaps)
+        shell: pwsh
+        run: |
+          $url = "https://github.com"
+          $output = "repack/data/data.zip"
+          Invoke-WebRequest -Uri $url -OutFile $output
+          Expand-Archive -Path $output -DestinationPath repack/data/
+          Remove-Item $output
+
+      - name: Deploy DLLs (MySQL 8.0.46 & OpenSSL)
+        shell: pwsh
+        run: |
+          copy "${{ env.VCPKG_ROOT }}/installed/x64-windows/bin/libmysql.dll" repack/bin/
+          copy "${{ env.VCPKG_ROOT }}/installed/x64-windows/bin/libcrypto-*.dll" repack/bin/
+          copy "${{ env.VCPKG_ROOT }}/installed/x64-windows/bin/libssl-*.dll" repack/bin/
+
+      - name: Auto-Configure Config Files
+        shell: pwsh
+        run: |
+          copy repack/bin/worldserver.conf.dist repack/configs/worldserver.conf
+          copy repack/bin/authserver.conf.dist repack/configs/authserver.conf
+
+          (Get-Content repack/configs/worldserver.conf) | ForEach-Object {
+            $_ -replace '^DataDir\s*=.*', 'DataDir = "../data"' `
+               -replace '^SourceDirectory\s*=.*', 'SourceDirectory = ".."' `
+               -replace '^MySQLExecutable\s*=.*', 'MySQLExecutable = "mysql"'
+          } | Set-Content repack/configs/worldserver.conf
+
+          (Get-Content repack/configs/authserver.conf) | ForEach-Object {
+            $_ -replace '^MySQLExecutable\s*=.*', 'MySQLExecutable = "mysql"'
+          } | Set-Content repack/configs/authserver.conf
+
+      - name: Compress Repack
+        shell: pwsh
+        run: |
+          Compress-Archive -Path repack/* -DestinationPath azerothcore-repack-windows.zip
+
+      - name: Upload Repack Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: windows-build
-          path: build
+          name: AzerothCore-Windows-Repack
+          path: azerothcore-repack-windows.zip
+
