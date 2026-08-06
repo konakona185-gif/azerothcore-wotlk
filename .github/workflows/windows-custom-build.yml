@@ -74,13 +74,11 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "Configurazione del server database portatile tramite i file nativi di sistema..."
-          # Windows Server di GitHub ha già i file binari di MySQL/MariaDB integrati nel sistema. Li usiamo direttamente senza scaricare nulla.
           if (Test-Path "C:\Program Files\MySQL") {
               Copy-Item -Path "C:\Program Files\MySQL\**\*" -Destination "repack/database/" -Recurse -Force -ErrorAction SilentlyContinue
           } elseif (Test-Path "C:\Program Files\MariaDB") {
               Copy-Item -Path "C:\Program Files\MariaDB\**\*" -Destination "repack/database/" -Recurse -Force -ErrorAction SilentlyContinue
           } else {
-              # Fallback di sicurezza su Chocolatey senza specificare la versione instabile
               choco install mariadb -y --no-progress
               Copy-Item -Path "C:\Program Files\MariaDB*\*" -Destination "repack/database/" -Recurse -Force -ErrorAction SilentlyContinue
           }
@@ -91,7 +89,7 @@ jobs:
         run: |
           cd repack/database
           
-          # Trova l'eseguibile mysqld per l'inizializzazione locale delle cartelle
+          # Trova gli eseguibili principali
           $mysqldPath = Get-ChildItem -Path . -Filter "mysqld.exe" -Recurse | Select-Object -First 1 -ExpandProperty FullName
           $mysqlPath = Get-ChildItem -Path . -Filter "mysql.exe" -Recurse | Select-Object -First 1 -ExpandProperty FullName
           $mysqladminPath = Get-ChildItem -Path . -Filter "mysqladmin.exe" -Recurse | Select-Object -First 1 -ExpandProperty FullName
@@ -113,15 +111,19 @@ jobs:
           Invoke-WebRequest -Uri "https://githubusercontent.com" -OutFile "auth_database.sql"
           Invoke-WebRequest -Uri "https://githubusercontent.com" -OutFile "characters_database.sql"
           
-          & $mysqlPath --port=3306 acore_auth < auth_database.sql
-          & $mysqlPath --port=3306 acore_characters < characters_database.sql
+          # CORREZIONE SINTASSI POWERSHELL: Usiamo -e "source file.sql" al posto di <
+          Write-Host "Importazione tabelle Auth e Characters..."
+          & $mysqlPath --port=3306 acore_auth -e "source auth_database.sql"
+          & $mysqlPath --port=3306 acore_characters -e "source characters_database.sql"
           
           Write-Host "Download del database acore_world completo..."
           $worldDbUrl = "https://github.com"
           Invoke-WebRequest -Uri $worldDbUrl -OutFile "world.zip"
           
           7z.exe x world.zip -y
-          & $mysqlPath --port=3306 acore_world < custom_world_database.sql
+          
+          Write-Host "Importazione del database acore_world..."
+          & $mysqlPath --port=3306 acore_world -e "source custom_world_database.sql"
 
           Write-Host "Spegnimento controllato del processo temporaneo..."
           & $mysqladminPath --port=3306 shutdown
