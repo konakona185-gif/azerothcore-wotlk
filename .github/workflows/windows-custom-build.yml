@@ -54,8 +54,9 @@ jobs:
           mkdir repack/configs
           mkdir repack/database
 
-          # Copia Eseguibili
+          # CORREZIONE: Copiamo sia gli eseguibili (.exe) sia i file di configurazione base (.conf.dist)
           Copy-Item "build/bin/Release/*.exe" -Destination "repack/bin/"
+          Copy-Item "build/bin/Release/*.conf.dist" -Destination "repack/bin/"
 
       - name: Extract Portable Database Engine from System
         shell: pwsh
@@ -73,11 +74,8 @@ jobs:
         run: |
           cd repack/sql
           Write-Host "Generazione locale dei file SQL strutturali..."
-          # Generiamo i file sul posto dal nulla per evitare download bloccati da GitHub
           "CREATE DATABASE IF NOT EXISTS acore_auth;" | Out-File -FilePath "auth_database.sql" -Encoding ASCII
           "CREATE DATABASE IF NOT EXISTS acore_characters;" | Out-File -FilePath "characters_database.sql" -Encoding ASCII
-          
-          Write-Host "Istruzioni per il database World inserite nel repack."
           "Sostituisci questo file con il file .sql estratto dal database World scaricato dal PC" | Out-File -FilePath "custom_world_database.sql" -Encoding ASCII
 
       - name: Create Auto-Initializer Script for PC
