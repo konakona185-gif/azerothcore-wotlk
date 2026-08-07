@@ -11,7 +11,7 @@ jobs:
       - name: Checkout AzerothCore (Official Master)
         uses: actions/checkout@v4
 
-      # 1. Installazione pulita delle librerie tramite Chocolatey (Niente vecchi controlli automatici)
+      # 1. Installazione pulita delle librerie tramite Chocolatey (GIA' VERDE ✅)
       - name: Install official dependencies via Chocolatey
         shell: pwsh
         run: |
@@ -19,6 +19,39 @@ jobs:
           choco install boost-msvc-14.3 -y --no-progress
           choco install openssl -y --no-progress
           
-          # Fissiamo i percorsi reali nel sistema per i passaggi futuri
           echo "BOOST_ROOT=C:\local\boost_1_87_0" >> $env:GITHUB_ENV
           echo "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" >> $env:GITHUB_ENV
+
+      # 2. NUOVO - Correzione chirurgica sul file profondo di mod-ale per bypassare il timeout di lua.org
+      - name: Patch mod-ale (Lua Mirror Redirection)
+        shell: pwsh
+        run: |
+          Write-Host "Modifica dell'indirizzo di download di Lua nel file profondo di mod-ale..."
+          $luaCmakeFile = "modules/mod-ale/src/lualib/lua/CMakeLists.txt"
+          if (Test-Path $luaCmakeFile) {
+              (Get-Content $luaCmakeFile) | ForEach-Object {
+                  $_ -replace 'https://lua.org', 'https://github.com'
+              } | Set-Content $luaCmakeFile
+              Write-Host "-> Patch applicata con successo sul file corretto!"
+          } else {
+              Write-Host "-> ATTENZIONE: File di configurazione di mod-ale non trovato nel percorso previsto."
+          }
+
+      # 3. NUOVO - Generazione dei file di progetto tramite CMake (Senza cercare Lua esternamente)
+      - name: Configure CMake (Core & Tools)
+        shell: pwsh
+        run: |
+          Write-Host "Generazione dei file di build con CMake..."
+          mkdir build
+          cd build
+          
+          $mysqlSdkPath = Get-ChildItem -Path "C:\Program Files\" -Filter "MySQL Connector *" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+          if (!$mysqlSdkPath) { $mysqlSdkPath = "C:\Program Files\MySQL\MySQL Server 8.0" }
+          
+          cmake .. `
+            -A x64 `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DTOOLS_BUILD=all `
+            -DSERVERS_BUILD=all `
+            -DMYSQL_INCLUDE_DIR="$mysqlSdkPath\include" `
+            -DMYSQL_LIBRARY="$mysqlSdkPath\lib\libmysql.lib"
