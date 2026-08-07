@@ -15,11 +15,9 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "Installazione rapida delle dipendenze ufficiali..."
-          # Installiamo solo Boost e OpenSSL che ieri sera hanno funzionato alla perfezione
           choco install boost-msvc-14.3 -y --no-progress
           choco install openssl -y --no-progress
           
-          # Configura i percorsi nativi di Chocolatey
           echo "BOOST_ROOT=C:\local\boost_1_87_0" >> $env:GITHUB_ENV
           echo "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" >> $env:GITHUB_ENV
 
@@ -29,13 +27,8 @@ jobs:
           mkdir build
           cd build
           
-          # Trova i percorsi del driver MySQL già installato sul sistema di GitHub
           $mysqlSdkPath = Get-ChildItem -Path "C:\Program Files\" -Filter "MySQL Connector *" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
-          if (!$mysqlSdkPath) {
-              $mysqlSdkPath = "C:\Program Files\MySQL\MySQL Server 8.0"
-          }
-          
-          Write-Host "Uso dei driver di sistema MySQL trovati in: $mysqlSdkPath"
+          if (!$mysqlSdkPath) { $mysqlSdkPath = "C:\Program Files\MySQL\MySQL Server 8.0" }
           
           cmake .. `
             -A x64 `
@@ -58,7 +51,6 @@ jobs:
           mkdir repack/bin
           mkdir repack/data
           mkdir repack/sql
-          mkdir repack/sql/base
           mkdir repack/configs
           mkdir repack/database
 
@@ -68,60 +60,66 @@ jobs:
       - name: Extract Portable Database Engine from System
         shell: pwsh
         run: |
-          Write-Host "Configurazione del server database portatile tramite i file nativi di sistema..."
+          Write-Host "Copia dei file del database di sistema..."
           if (Test-Path "C:\Program Files\MySQL\MySQL Server 8.0") {
               Copy-Item -Path "C:\Program Files\MySQL\MySQL Server 8.0\**\*" -Destination "repack/database/" -Recurse -Force -ErrorAction SilentlyContinue
-          } elseif (Test-Path "C:\Program Files\MariaDB") {
-              Copy-Item -Path "C:\Program Files\MariaDB\**\*" -Destination "repack/database/" -Recurse -Force -ErrorAction SilentlyContinue
           } else {
               choco install mariadb -y --no-progress
               Copy-Item -Path "C:\Program Files\MariaDB*\*" -Destination "repack/database/" -Recurse -Force -ErrorAction SilentlyContinue
           }
-          mkdir repack/database/data
 
-      - name: Initialize SQL Engine and Import AzerothCore Data
+      - name: Prepare SQL files for Auto-Import on PC
         shell: pwsh
         run: |
-          cd repack/database
-          
-          $mysqldPath = Get-ChildItem -Path . -Filter "mysqld.exe" -Recurse | Select-Object -First 1 -ExpandProperty FullName
-          $mysqlPath = Get-ChildItem -Path . -Filter "mysql.exe" -Recurse | Select-Object -First 1 -ExpandProperty FullName
-          $mysqladminPath = Get-ChildItem -Path . -Filter "mysqladmin.exe" -Recurse | Select-Object -First 1 -ExpandProperty FullName
-          
-          Write-Host "Inizializzazione del dizionario dei dati..."
-          if ($mysqldPath -match "mariadb") {
-              & (Get-ChildItem -Path . -Filter "mysql_install_db.exe" -Recurse | Select-Object -First 1 -ExpandProperty FullName) --datadir=.\data --password=""
-          } else {
-              & $mysqldPath --initialize-insecure --datadir=.\data
-          }
-          
-          Write-Host "Avvio dell'istanza in background sulla porta standard 3306..."
-          $dbProcess = Start-Process $mysqldPath -ArgumentList "--datadir=.\data", "--skip-grant-tables", "--port=3306" -PassThru
-          
-          Start-Sleep -Seconds 25
-          
-          & $mysqlPath --port=3306 -e "CREATE DATABASE IF NOT EXISTS acore_auth; CREATE DATABASE IF NOT EXISTS acore_characters; CREATE DATABASE IF NOT EXISTS acore_world;"
-          
+          cd repack/sql
           Write-Host "Download degli schemi SQL ufficiali di AzerothCore..."
           Invoke-WebRequest -Uri "https://githubusercontent.com" -OutFile "auth_database.sql"
           Invoke-WebRequest -Uri "https://githubusercontent.com" -OutFile "characters_database.sql"
           
-          Write-Host "Importazione tabelle Auth e Characters..."
-          & $mysqlPath --port=3306 acore_auth -e "source auth_database.sql"
-          & $mysqlPath --port=3306 acore_characters -e "source characters_database.sql"
-          
           Write-Host "Download del database acore_world completo..."
           $worldDbUrl = "https://github.com"
           Invoke-WebRequest -Uri $worldDbUrl -OutFile "world.zip"
-          
           7z.exe x world.zip -y
-          
-          Write-Host "Importazione del database acore_world..."
-          & $mysqlPath --port=3306 acore_world -e "source custom_world_database.sql"
+          Remove-Item world.zip
 
-          Write-Host "Spegnimento controllato del processo temporaneo..."
-          & $mysqladminPath --port=3306 shutdown
-          if (!$dbProcess.HasExited) { Stop-Process -Id $dbProcess.Id -Force }
+      - name: Create Auto-Initializer Script for PC
+        shell: pwsh
+        run: |
+          # Creiamo il file .bat intelligente che farà tutto da solo al primo avvio sul tuo computer
+          $batContent = @"
+          @echo off
+          echo ===================================================
+          echo      INIZIALIZZAZIONE AUTOMATICA DEL DATABASE
+          echo ===================================================
+          cd /d "%~dp0"
+          
+          if exist database\data\acore_world (
+              echo Database gia' inizializzato. Avvio del server MySQL...
+              start "" "database\bin\mysqld.exe" --datadir=..\data --port=3306
+              exit /b
+          )
+          
+          echo Inizializzazione delle cartelle dati di MySQL...
+          start /wait "" "database\bin\mysqld.exe" --initialize-insecure --datadir=..\data
+          
+          echo Avvio temporaneo del database...
+          start "" "database\bin\mysqld.exe" --datadir=..\data --skip-grant-tables --port=3306
+          timeout /t 5 /nobreak > nul
+          
+          echo Creazione dei Database puliti...
+          database\bin\mysql.exe --port=3306 -e "CREATE DATABASE acore_auth; CREATE DATABASE acore_characters; CREATE DATABASE acore_world;"
+          
+          echo Importazione dei file SQL di AzerothCore (Attendi qualche secondo)...
+          database\bin\mysql.exe --port=3306 acore_auth < sql\auth_database.sql
+          database\bin\mysql.exe --port=3306 acore_characters < sql\characters_database.sql
+          database\bin\mysql.exe --port=3306 acore_world < sql\custom_world_database.sql
+          
+          echo ===================================================
+          echo   DATABASE PRONTO! Puoi avviare authserver e worldserver.
+          echo ===================================================
+          pause
+          "@
+          $batContent | Out-File -FilePath "repack/1-Clic-Avvia-Database.bat" -Encoding ASCII
 
       - name: Download and Extract Client Data (DBC, Maps, VMaps, MMaps)
         shell: pwsh
@@ -129,10 +127,7 @@ jobs:
           $url = "https://github.com"
           $output = "repack/data/data.zip"
           Invoke-WebRequest -Uri $url -OutFile $output
-          
-          Write-Host "Estrazione delle mappe di gioco tramite 7-Zip..."
           7z.exe x $output -orepack/data/ -y
-          
           Remove-Item $output
 
       - name: Deploy DLLs (MySQL & OpenSSL)
