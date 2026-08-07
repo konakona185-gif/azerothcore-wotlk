@@ -15,12 +15,11 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "Installazione rapida delle dipendenze ufficiali..."
+          # Installiamo solo Boost e OpenSSL che ieri sera hanno funzionato alla perfezione
           choco install boost-msvc-14.3 -y --no-progress
           choco install openssl -y --no-progress
-          # CORREZIONE NOMENCLATURA: Il pacchetto ufficiale su Chocolatey si chiama mysql-connector
-          choco install mysql-connector -y --no-progress
           
-          # CORREZIONE PERCORSI: Allineato alla versione 1.87.0 scaricata da Chocolatey
+          # Configura i percorsi nativi di Chocolatey
           echo "BOOST_ROOT=C:\local\boost_1_87_0" >> $env:GITHUB_ENV
           echo "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" >> $env:GITHUB_ENV
 
@@ -29,11 +28,22 @@ jobs:
         run: |
           mkdir build
           cd build
+          
+          # Trova i percorsi del driver MySQL già installato sul sistema di GitHub
+          $mysqlSdkPath = Get-ChildItem -Path "C:\Program Files\" -Filter "MySQL Connector *" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+          if (!$mysqlSdkPath) {
+              $mysqlSdkPath = "C:\Program Files\MySQL\MySQL Server 8.0"
+          }
+          
+          Write-Host "Uso dei driver di sistema MySQL trovati in: $mysqlSdkPath"
+          
           cmake .. `
             -A x64 `
             -DCMAKE_BUILD_TYPE=Release `
             -DTOOLS_BUILD=all `
-            -DSERVERS_BUILD=all
+            -DSERVERS_BUILD=all `
+            -DMYSQL_INCLUDE_DIR="$mysqlSdkPath\include" `
+            -DMYSQL_LIBRARY="$mysqlSdkPath\lib\libmysql.lib"
 
       - name: Build Core and Tools
         shell: pwsh
@@ -59,8 +69,8 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "Configurazione del server database portatile tramite i file nativi di sistema..."
-          if (Test-Path "C:\Program Files\MySQL") {
-              Copy-Item -Path "C:\Program Files\MySQL\**\*" -Destination "repack/database/" -Recurse -Force -ErrorAction SilentlyContinue
+          if (Test-Path "C:\Program Files\MySQL\MySQL Server 8.0") {
+              Copy-Item -Path "C:\Program Files\MySQL\MySQL Server 8.0\**\*" -Destination "repack/database/" -Recurse -Force -ErrorAction SilentlyContinue
           } elseif (Test-Path "C:\Program Files\MariaDB") {
               Copy-Item -Path "C:\Program Files\MariaDB\**\*" -Destination "repack/database/" -Recurse -Force -ErrorAction SilentlyContinue
           } else {
