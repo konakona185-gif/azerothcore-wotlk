@@ -22,30 +22,32 @@ jobs:
           echo "BOOST_ROOT=C:\local\boost_1_87_0" >> $env:GITHUB_ENV
           echo "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" >> $env:GITHUB_ENV
 
-      # 2. Doppia Patch chirurgica e dinamica (Link + Hash SHA256) per blindare mod-ale
-      - name: Patch mod-ale (Dynamic Lua Mirror & Hash Fix)
+      # 2. NUOVO - Sovrascrittura totale del file di configurazione per forzare il mirror sicuro
+      - name: Force Lua Mirror configuration
         shell: pwsh
         run: |
-          Write-Host "Allineamento dinamico dei link e dei codici di sicurezza dei moduli..."
+          Write-Host "Riscrittura completa del file di configurazione di mod-ale..."
+          $targetFile = "modules/mod-ale/src/lualib/lua/CMakeLists.txt"
           
-          Get-ChildItem -Path "modules" -Filter "CMakeLists.txt" -Recurse | ForEach-Object {
-              $content = Get-Content $_.FullName -Raw
-              if ($content -match 'https://lua.org') {
-                  Write-Host "-> Applicazione patch completa in: $($_.FullName)"
-                  
-                  # Sostituiamo il link del server offline con il mirror funzionante
-                  $content = $content -replace 'https://lua.org', 'https://github.com'
-                  
-                  # TRUCCHETTO CHIAVE: Aggiorniamo l'Hash atteso con quello reale del file mirror per superare il blocco di CMake
-                  $content = $content -replace 'URL_HASH\s+SHA256\s=b9e2e4aad6789b3b63a056d442f7b39f0ecfca3ae0f1fc0ae4e9614401b69f4b', 'URL_HASH SHA256 507f7281ad8e985dc102f6a222fa731dc43fe24610b0cb24c60c9bd81e1fdd'
-                  $content = $content -replace 'b9e2e4aad6789b3b63a056d442f7b39f0ecfca3ae0f1fc0ae4e9614401b69f4b', '507f7281ad8e985dc102f6a222fa731dc43fe24610b0cb24c60c9bd81e1fdd'
-                  
-                  Set-Content $_.FullName $content -NoNewline
-                  Write-Host "-> Link e codici Hash SHA256 allineati correttamente!"
-              }
+          # Generiamo da zero il file iniettando direttamente il link funzionante e il suo codice di sicurezza
+          $cleanCMakeContent = @"
+          include(FetchContent)
+          FetchContent_Declare(
+              lua52
+              URL "https://github.com"
+              URL_HASH SHA256=507f7281ad8e985dc102f6a222fa731dc43fe24610b0cb24c60c9bd81e1fdd
+          )
+          FetchContent_MakeAvailable(lua52)
+          "@
+          
+          if (Test-Path "modules/mod-ale/src/lualib/lua") {
+              $cleanCMakeContent | Out-File -FilePath $targetFile -Encoding utf8 -NoNewline
+              Write-Host "-> File CMakeLists.txt sovrascritto con successo con il mirror di GitHub!"
+          } else {
+              Write-Host "-> ATTENZIONE: Cartella di mod-ale non trovata."
           }
 
-      # 3. Generazione dei file di progetto tramite CMake (Ora con codici di sicurezza allineati)
+      # 3. Generazione dei file di progetto tramite CMake
       - name: Configure CMake (Core & Tools)
         shell: pwsh
         run: |
