@@ -54,9 +54,8 @@ jobs:
           mkdir repack/configs
           mkdir repack/database
 
-          # Copia Eseguibili e file di configurazione dist
+          # Copia Eseguibili reali
           Copy-Item "build/bin/Release/*.exe" -Destination "repack/bin/"
-          Copy-Item "build/bin/Release/*.conf.dist" -Destination "repack/bin/"
 
       - name: Extract Portable Database Engine from System
         shell: pwsh
@@ -74,7 +73,6 @@ jobs:
         run: |
           cd repack/sql
           Write-Host "Generazione locale dei file SQL strutturali..."
-          # Generiamo i file sul posto dal nulla per evitare download bloccati da GitHub
           "CREATE DATABASE IF NOT EXISTS acore_auth;" | Out-File -FilePath "auth_database.sql" -Encoding ASCII
           "CREATE DATABASE IF NOT EXISTS acore_characters;" | Out-File -FilePath "characters_database.sql" -Encoding ASCII
           "Sostituisci questo testo con il file del database World scaricato dal PC" | Out-File -FilePath "custom_world_database.sql" -Encoding ASCII
@@ -136,8 +134,9 @@ jobs:
       - name: Auto-Configure Config Files
         shell: pwsh
         run: |
-          Copy-Item -Path "repack/bin/worldserver.conf.dist" -Destination "repack/configs/worldserver.conf"
-          Copy-Item -Path "repack/bin/authserver.conf.dist" -Destination "repack/configs/authserver.conf"
+          # CORREZIONE FINALE: Prende i file direttamente dall'origine corretta della build
+          Copy-Item -Path "build/bin/Release/worldserver.conf.dist" -Destination "repack/configs/worldserver.conf"
+          Copy-Item -Path "build/bin/Release/authserver.conf.dist" -Destination "repack/configs/authserver.conf"
 
           (Get-Content repack/configs/worldserver.conf) | ForEach-Object {
             $_ -replace '^DataDir\s*=.*', 'DataDir = "../data"' `
