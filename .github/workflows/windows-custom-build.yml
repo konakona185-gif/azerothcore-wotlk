@@ -15,14 +15,14 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "Installazione rapida delle dipendenze ufficiali..."
-          # Scarica i pacchetti pre-compilati stabili
           choco install boost-msvc-14.3 -y --no-progress
           choco install openssl -y --no-progress
-          choco install mysql-connector-cpp -y --no-progress
+          # CORREZIONE NOMENCLATURA: Il pacchetto ufficiale su Chocolatey si chiama mysql-connector
+          choco install mysql-connector -y --no-progress
           
-          # Configura le variabili d'ambiente per CMake
-          echo "BOOST_ROOT=C:\local\boost_1_83_0" >> $env:GITHUB_ENV
-          echo "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL-Win64" >> $env:GITHUB_ENV
+          # CORREZIONE PERCORSI: Allineato alla versione 1.87.0 scaricata da Chocolatey
+          echo "BOOST_ROOT=C:\local\boost_1_87_0" >> $env:GITHUB_ENV
+          echo "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" >> $env:GITHUB_ENV
 
       - name: Configure CMake (Core & Tools)
         shell: pwsh
@@ -85,7 +85,6 @@ jobs:
               & $mysqldPath --initialize-insecure --datadir=.\data
           }
           
-          # CONFIGURAZIONE PORTA 3306: Avviamo sulla porta standard
           Write-Host "Avvio dell'istanza in background sulla porta standard 3306..."
           $dbProcess = Start-Process $mysqldPath -ArgumentList "--datadir=.\data", "--skip-grant-tables", "--port=3306" -PassThru
           
@@ -129,8 +128,8 @@ jobs:
       - name: Deploy DLLs (MySQL & OpenSSL)
         shell: pwsh
         run: |
-          Copy-Item -Path "C:\Program Files\OpenSSL-Win64\bin\libcrypto-*.dll" -Destination "repack/bin/" -ErrorAction SilentlyContinue
-          Copy-Item -Path "C:\Program Files\OpenSSL-Win64\bin\libssl-*.dll" -Destination "repack/bin/" -ErrorAction SilentlyContinue
+          Copy-Item -Path "C:\Program Files\OpenSSL\bin\libcrypto-*.dll" -Destination "repack/bin/" -ErrorAction SilentlyContinue
+          Copy-Item -Path "C:\Program Files\OpenSSL\bin\libssl-*.dll" -Destination "repack/bin/" -ErrorAction SilentlyContinue
           $mysqlDll = Get-ChildItem -Path "C:\Program Files\" -Filter "libmysql.dll" -Recurse | Select-Object -First 1 -ExpandProperty FullName
           if ($mysqlDll) { Copy-Item -Path $mysqlDll -Destination "repack/bin/" }
 
