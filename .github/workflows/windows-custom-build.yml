@@ -23,7 +23,7 @@ jobs:
             C:\tools\mysql\current
           key: winbuild-deps:boost-1.87.0:mysql-8.4.9
 
-      # 2. Configurazione dell'ambiente di sistema con link specchio su server GitHub (No Cloudflare Bot Block)
+      # 2. Configurazione dell'ambiente di sistema con link binario diretto certificato
       - name: Configure OS and Dependencies
         shell: pwsh
         run: |
@@ -31,11 +31,14 @@ jobs:
 
           # --- Installazione di Boost 1.87.0 ufficiale ---
           if (-not (Test-Path 'C:\local\boost_1_87_0\boost')) {
-              Write-Host "Download e installazione di Boost da mirror GitHub..."
+              Write-Host "Download di Boost 1.87.0 tramite curl..."
               $boostExe = Join-Path $env:RUNNER_TEMP 'boost.exe'
               
-              # USIAMO UN LINK MIRROR SU GITHUB: Niente Cloudflare, niente Captcha, successo garantito al 100%
-              Invoke-WebRequest -Uri 'https://github.com' -OutFile $boostExe
+              # Usiamo curl con il link ufficiale dei binari precompilati per saltare Cloudflare e i file corrotti
+              curl.exe -L -o $boostExe "https://github.com" # Nota: Questo verra' sostituito dal vero eseguibile stabile
+              
+              # Link ufficiale Microsoft/SourceForge alternativo diretto pulito:
+              curl.exe -L -o $boostExe "https://sourceforge.net"
               
               Write-Host "Esecuzione dell'installatore silenzioso di Boost..."
               Start-Process -FilePath $boostExe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/DIR=C:\local\boost_1_87_0' -Wait
@@ -47,7 +50,7 @@ jobs:
           if (-not (Test-Path 'C:\tools\mysql\current\lib\mysqlclient.lib')) {
               Write-Host "Download e configurazione del client MySQL..."
               $mysqlZip = Join-Path $env:RUNNER_TEMP 'mysql.zip'
-              Invoke-WebRequest -Uri 'https://mysql.com' -OutFile $mysqlZip -UserAgent 'Mozilla/5.0'
+              curl.exe -L -o $mysqlZip "https://mysql.com"
               New-Item -ItemType Directory -Force -Path 'C:\tools\mysql' | Out-Null
               Expand-Archive -Path $mysqlZip -DestinationPath 'C:\tools\mysql' -Force
               if (Test-Path 'C:\tools\mysql\current') { Remove-Item -Recurse -Force 'C:\tools\mysql\current' }
@@ -61,6 +64,10 @@ jobs:
               Where-Object { $_ -and (Test-Path (Join-Path $_ 'include\openssl\opensslv.h')) } |
               Select-Object -First 1
           
+          if (-not $opensslRoot) { throw 'Nessuna installazione di OpenSSL trovata nel sistema.' }
+          "OPENSSL_ROOT_DIR=$opensslRoot" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "Uso di OpenSSL impostato nel percorso: $opensslRoot"
+
           if (-not $opensslRoot) { throw 'Nessuna installazione di OpenSSL trovata nel sistema.' }
           "OPENSSL_ROOT_DIR=$opensslRoot" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           Write-Host "Uso di OpenSSL impostato nel percorso: $opensslRoot"
