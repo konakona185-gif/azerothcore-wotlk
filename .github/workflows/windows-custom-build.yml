@@ -74,15 +74,23 @@ jobs:
           cd repack/sql
           Write-Host "Generazione locale dei file SQL strutturali..."
           
-          # Generiamo i file sul posto scrivendoci le query minime di inizializzazione. Il resto lo fara' l'auto-updater di AzerothCore sul tuo PC!
           "CREATE DATABASE IF NOT EXISTS acore_auth;" | Out-File -FilePath "auth_database.sql" -Encoding ASCII
           "CREATE DATABASE IF NOT EXISTS acore_characters;" | Out-File -FilePath "characters_database.sql" -Encoding ASCII
           
-          Write-Host "Download del database acore_world completo..."
+          # RISOLUZIONE DEFINITIVA URL: Usiamo il link ufficiale "latest" che scarica sempre l'ultima versione reale del database World
+          Write-Host "Download del database acore_world aggiornato ufficiale..."
           $worldDbUrl = "https://github.com"
           Invoke-WebRequest -Uri $worldDbUrl -OutFile "world.zip"
+          
+          # Estrazione controllata
           7z.exe x world.zip -y
           Remove-Item world.zip
+          
+          # Rinominiamo il file estratto in un nome standard per far funzionare lo script .bat sul tuo PC
+          $extractedSql = Get-ChildItem -Filter "*.sql" | Select-Object -First 1
+          if ($extractedSql) {
+              Rename-Item -Path $extractedSql.FullName -NewName "custom_world_database.sql"
+          }
 
       - name: Create Auto-Initializer Script for PC
         shell: pwsh
