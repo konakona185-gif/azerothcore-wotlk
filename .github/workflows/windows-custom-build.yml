@@ -67,7 +67,3 @@ jobs:
           if (-not $opensslRoot) { throw 'Nessuna installazione di OpenSSL trovata nel sistema.' }
           "OPENSSL_ROOT_DIR=$opensslRoot" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           Write-Host "Uso di OpenSSL impostato nel percorso: $opensslRoot"
-
-          if (-not $opensslRoot) { throw 'Nessuna installazione di OpenSSL trovata nel sistema.' }
-          "OPENSSL_ROOT_DIR=$opensslRoot" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          Write-Host "Uso di OpenSSL impostato nel percorso: $opensslRoot"
