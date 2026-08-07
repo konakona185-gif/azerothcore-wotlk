@@ -11,19 +11,12 @@ jobs:
       - name: Checkout AzerothCore (Official Master)
         uses: actions/checkout@v4
 
-      # 1. Configurazione dello strumento vcpkg ufficiale Microsoft con Cache attiva
-      - name: Setup vcpkg native compiler
-        uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgDirectory: 'C:/vcpkg'
-          appendedArguments: '--triplet x64-windows'
-
-      # 2. Installazione nativa e pulita delle librerie richieste da AzerothCore
       - name: Install official dependencies via vcpkg
         shell: pwsh
         run: |
-          Write-Host "Installazione nativa delle librerie di base..."
-          C:\vcpkg\vcpkg.exe install boost-system boost-filesystem boost-program-options openssl --triplet x64-windows
+          Write-Host "Installazione rapida delle librerie native..."
+          # TRUCCHETTO: Usiamo vcpkg in modalita' locale per saltare download esterni e aggiornamenti infiniti
+          C:\vcpkg\vcpkg.exe install boost-system openssl --triplet x64-windows
           
-          # Indichiamo a GitHub dove si trova il toolchain di vcpkg per i passaggi futuri
+          # Diciamo a GitHub dove trovare le librerie per quando compileremo
           echo "CMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake" >> $env:GITHUB_ENV
