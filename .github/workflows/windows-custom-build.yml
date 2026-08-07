@@ -69,26 +69,15 @@ jobs:
               Copy-Item -Path "C:\Program Files\MariaDB*\*" -Destination "repack/database/" -Recurse -Force -ErrorAction SilentlyContinue
           }
 
-      - name: Download Database and Client Data Internally
+      - name: Prepare SQL Structures Locally
         shell: pwsh
         run: |
-          # 1. Gestione file SQL locali
           cd repack/sql
+          Write-Host "Generazione locale dei file SQL strutturali..."
+          # Generiamo i file sul posto dal nulla per evitare download bloccati da GitHub
           "CREATE DATABASE IF NOT EXISTS acore_auth;" | Out-File -FilePath "auth_database.sql" -Encoding ASCII
           "CREATE DATABASE IF NOT EXISTS acore_characters;" | Out-File -FilePath "characters_database.sql" -Encoding ASCII
-          
-          # 2. Download Database World (usando curl nativo per aggirare i blocchi di Invoke-WebRequest)
-          Write-Host "Download del database acore_world..."
-          curl.exe -L -o "world.zip" "https://github.com"
-          7z.exe x world.zip -y
-          Remove-Item world.zip
-          
-          # 3. Download e scompattamento Mappe e DBC puliti
-          cd ../data
-          Write-Host "Download delle mappe di gioco (data.zip)..."
-          curl.exe -L -o "data.zip" "https://github.com"
-          7z.exe x data.zip -y
-          Remove-Item data.zip
+          "Sostituisci questo testo con il file del database World scaricato dal PC" | Out-File -FilePath "custom_world_database.sql" -Encoding ASCII
 
       - name: Create Auto-Initializer Script for PC
         shell: pwsh
@@ -119,7 +108,15 @@ jobs:
           echo Importazione dei file SQL di AzerothCore (Attendi qualche secondo)...
           database\bin\mysql.exe --port=3306 acore_auth < sql\auth_database.sql
           database\bin\mysql.exe --port=3306 acore_characters < sql\characters_database.sql
-          database\bin\mysql.exe --port=3306 acore_world < sql\custom_world_database.sql
+          
+          if exist sql\*.sql (
+              echo Importazione del database World in corso...
+              for %%f in (sql\*.sql) do (
+                  if not "%%~nxf"=="auth_database.sql" if not "%%~nxf"=="characters_database.sql" (
+                      database\bin\mysql.exe --port=3306 acore_world < "%%f"
+                  )
+              )
+          )
           
           echo ===================================================
           echo   DATABASE PRONTO! Puoi avviare authserver e worldserver.
