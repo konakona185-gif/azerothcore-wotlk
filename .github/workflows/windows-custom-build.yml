@@ -68,14 +68,26 @@ jobs:
               Copy-Item -Path "C:\Program Files\MariaDB*\*" -Destination "repack/database/" -Recurse -Force -ErrorAction SilentlyContinue
           }
 
-      - name: Prepare SQL Structures Locally
+      - name: Implement ChatGPT Strategy (Download database-wotlk files)
         shell: pwsh
         run: |
           cd repack/sql
-          Write-Host "Generazione locale dei file SQL strutturali..."
+          Write-Host "Generazione locale degli schemi minimi..."
           "CREATE DATABASE IF NOT EXISTS acore_auth;" | Out-File -FilePath "auth_database.sql" -Encoding ASCII
           "CREATE DATABASE IF NOT EXISTS acore_characters;" | Out-File -FilePath "characters_database.sql" -Encoding ASCII
-          "Sostituisci questo testo con il file del database World scaricato dal PC" | Out-File -FilePath "custom_world_database.sql" -Encoding ASCII
+          
+          # SCARICAMENTO ARCHIVIO SUGGERITO DA CHATGPT
+          Write-Host "Scaricamento dei file di testo del database World..."
+          curl.exe -L -o "database_world.zip" "https://github.com"
+          
+          Write-Host "Estrazione degli schemi del mondo..."
+          7z.exe x database_world.zip -y
+          
+          # Spostiamo i file .sql nella cartella principale sql/ per l'auto-importazione successiva
+          if (Test-Path "database-wotlk-master/sql") {
+              Copy-Item -Path "database-wotlk-master/sql/**/*.sql" -Destination "." -Force -ErrorAction SilentlyContinue
+          }
+          Remove-Item database_world.zip
 
       - name: Create Auto-Initializer Script for PC
         shell: pwsh
@@ -103,18 +115,18 @@ jobs:
           echo Creazione dei Database puliti...
           database\bin\mysql.exe --port=3306 -e "CREATE DATABASE IF NOT EXISTS acore_auth; CREATE DATABASE IF NOT EXISTS acore_characters; CREATE DATABASE IF NOT EXISTS acore_world;"
           
-          echo Importazione dei file SQL di AzerothCore (Attendi qualche secondo)...
+          echo Importazione dei file SQL base...
           database\bin\mysql.exe --port=3306 acore_auth < sql\auth_database.sql
           database\bin\mysql.exe --port=3306 acore_characters < sql\characters_database.sql
           
-          if exist sql\*.sql (
-              echo Importazione del database World in corso...
-              for %%f in (sql\*.sql) do (
-                  if not "%%~nxf"=="auth_database.sql" if not "%%~nxf"=="characters_database.sql" (
-                      database\bin\mysql.exe --port=3306 acore_world < "%%f"
-                  )
+          echo Importazione massiva di tutti gli schemi World (Attendi qualche secondo)...
+          cd sql
+          for /r %%f in (*.sql) do (
+              if not "%%~nxf"=="auth_database.sql" if not "%%~nxf"=="characters_database.sql" (
+                  ..\database\bin\mysql.exe --port=3306 acore_world < "%%f"
               )
           )
+          cd ..
           
           echo ===================================================
           echo   DATABASE PRONTO! Puoi avviare authserver e worldserver.
@@ -130,31 +142,6 @@ jobs:
           Copy-Item -Path "C:\Program Files\OpenSSL\bin\libssl-*.dll" -Destination "repack/bin/" -ErrorAction SilentlyContinue
           $mysqlDll = Get-ChildItem -Path "C:\Program Files\" -Filter "libmysql.dll" -Recurse | Select-Object -First 1 -ExpandProperty FullName
           if ($mysqlDll) { Copy-Item -Path $mysqlDll -Destination "repack/bin/" }
-
-      - name: Auto-Configure Config Files
-        shell: pwsh
-        run: |
-          # STRATEGIA DI COPIA COMPLETA ED INFALLIBILE
-          $worldSource = "build/bin/Release/worldserver.conf.dist"
-          if (!(Test-Path $worldSource)) { $worldSource = "src/server/worldserver/worldserver.conf.dist" }
-          if (Test-Path $worldSource) { Copy-Item -Path $worldSource -Destination "repack/configs/worldserver.conf" } else { "DataDir = `"..`"" | Out-File -FilePath "repack/configs/worldserver.conf" -Encoding ASCII }
-
-          $authSource = "build/bin/Release/authserver.conf.dist"
-          if (!(Test-Path $authSource)) { $authSource = "src/server/authserver/authserver.conf.dist" }
-          if (Test-Path $authSource) { Copy-Item -Path $authSource -Destination "repack/configs/authserver.conf" } else { "MySQLExecutable = `"mysql`"" | Out-File -FilePath "repack/configs/authserver.conf" -Encoding ASCII }
-
-          # Modifica dei parametri di configurazione
-          (Get-Content repack/configs/worldserver.conf) | ForEach-Object {
-            $_ -replace '^DataDir\s*=.*', 'DataDir = "../data"' `
-               -replace '^SourceDirectory\s*=.*', 'SourceDirectory = ".."' `
-               -replace '^MySQLExecutable\s*=.*', 'MySQLExecutable = "mysql"' `
-               -replace '^Updates.EnableDatabases\s*=.*', 'Updates.EnableDatabases = 1'
-          } | Set-Content repack/configs/worldserver.conf
-
-          (Get-Content repack/configs/authserver.conf) | ForEach-Object {
-            $_ -replace '^MySQLExecutable\s*=.*', 'MySQLExecutable = "mysql"' `
-               -replace '^Updates.EnableDatabases\s*=.*', 'Updates.EnableDatabases = 1'
-          } | Set-Content repack/configs/authserver.conf
 
       - name: Compress Repack
         shell: pwsh
