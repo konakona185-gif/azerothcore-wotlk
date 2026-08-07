@@ -11,33 +11,34 @@ jobs:
       - name: Checkout AzerothCore (Official Master)
         uses: actions/checkout@v4
 
-      # 1. Installazione pulita delle librerie tramite Chocolatey (GIA' VERDE ✅)
+      # 1. Installazione delle librerie tramite Chocolatey (GIA' VERDE ✅)
       - name: Install official dependencies via Chocolatey
         shell: pwsh
         run: |
-          Write-Host "Installazione dei componenti ufficiali di fabbrica..."
+          Write-Host "Installazione dei components ufficiali di fabbrica..."
           choco install boost-msvc-14.3 -y --no-progress
           choco install openssl -y --no-progress
           
           echo "BOOST_ROOT=C:\local\boost_1_87_0" >> $env:GITHUB_ENV
           echo "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" >> $env:GITHUB_ENV
 
-      # 2. NUOVO - Correzione chirurgica sul file profondo di mod-ale per bypassare il timeout di lua.org
-      - name: Patch mod-ale (Lua Mirror Redirection)
+      # 2. NUOVO - Cacciatore di file automatico per deviare il download di Lua ovunque sia nascosto
+      - name: Patch mod-ale (Dymamic Lua Mirror Redirection)
         shell: pwsh
         run: |
-          Write-Host "Modifica dell'indirizzo di download di Lua nel file profondo di mod-ale..."
-          $luaCmakeFile = "modules/mod-ale/src/lualib/lua/CMakeLists.txt"
-          if (Test-Path $luaCmakeFile) {
-              (Get-Content $luaCmakeFile) | ForEach-Object {
-                  $_ -replace 'https://lua.org', 'https://github.com'
-              } | Set-Content $luaCmakeFile
-              Write-Host "-> Patch applicata con successo sul file corretto!"
-          } else {
-              Write-Host "-> ATTENZIONE: File di configurazione di mod-ale non trovato nel percorso previsto."
+          Write-Host "Ricerca dinamica di tutti i file di configurazione dei moduli..."
+          
+          # Cerchiamo qualsiasi CMakeLists.txt dentro la cartella modules che contenga il link di lua.org
+          Get-ChildItem -Path "modules" -Filter "CMakeLists.txt" -Recurse | ForEach-Object {
+              $content = Get-Content $_.FullName
+              if ($content -match 'https://www.lua.org/ftp/lua-5.2.4.tar.gz') {
+                  Write-Host "-> Trovato file da correggere in: $($_.FullName)"
+                  $content -replace 'https://www.lua.org/ftp/lua-5.2.4.tar.gz', 'https://github.com' | Set-Content $_.FullName
+                  Write-Host "-> Patch applicata con successo!"
+              }
           }
 
-      # 3. NUOVO - Generazione dei file di progetto tramite CMake (Senza cercare Lua esternamente)
+      # 3. Generazione dei file di progetto tramite CMake
       - name: Configure CMake (Core & Tools)
         shell: pwsh
         run: |
