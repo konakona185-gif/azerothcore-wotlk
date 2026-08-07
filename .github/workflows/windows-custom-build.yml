@@ -11,18 +11,14 @@ jobs:
       - name: Checkout AzerothCore (Official Master)
         uses: actions/checkout@v4
 
-      # 1. Installazione fulminea e nativa delle librerie tramite Chocolatey (Niente blocchi di rete)
+      # 1. Installazione pulita delle librerie tramite Chocolatey (Niente vecchi controlli automatici)
       - name: Install official dependencies via Chocolatey
         shell: pwsh
         run: |
-          Write-Host "Installazione rapida dei componenti di fabbrica..."
+          Write-Host "Installazione dei componenti ufficiali di fabbrica..."
           choco install boost-msvc-14.3 -y --no-progress
           choco install openssl -y --no-progress
           
-          # Indichiamo a Windows dove sono state depositate le librerie ufficiali
+          # Fissiamo i percorsi reali nel sistema per i passaggi futuri
           echo "BOOST_ROOT=C:\local\boost_1_87_0" >> $env:GITHUB_ENV
           echo "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" >> $env:GITHUB_ENV
-
-          if (-not $opensslRoot) { throw 'Nessuna installazione di OpenSSL trovata nel sistema.' }
-          "OPENSSL_ROOT_DIR=$opensslRoot" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          Write-Host "Uso di OpenSSL impostato nel percorso: $opensslRoot"
