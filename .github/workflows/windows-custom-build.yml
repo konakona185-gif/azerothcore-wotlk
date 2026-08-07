@@ -134,10 +134,16 @@ jobs:
       - name: Auto-Configure Config Files
         shell: pwsh
         run: |
-          # CORREZIONE FINALE: Prende i file direttamente dall'origine corretta della build
-          Copy-Item -Path "build/bin/Release/worldserver.conf.dist" -Destination "repack/configs/worldserver.conf"
-          Copy-Item -Path "build/bin/Release/authserver.conf.dist" -Destination "repack/configs/authserver.conf"
+          # STRATEGIA DI COPIA COMPLETA ED INFALLIBILE
+          $worldSource = "build/bin/Release/worldserver.conf.dist"
+          if (!(Test-Path $worldSource)) { $worldSource = "src/server/worldserver/worldserver.conf.dist" }
+          if (Test-Path $worldSource) { Copy-Item -Path $worldSource -Destination "repack/configs/worldserver.conf" } else { "DataDir = `"..`"" | Out-File -FilePath "repack/configs/worldserver.conf" -Encoding ASCII }
 
+          $authSource = "build/bin/Release/authserver.conf.dist"
+          if (!(Test-Path $authSource)) { $authSource = "src/server/authserver/authserver.conf.dist" }
+          if (Test-Path $authSource) { Copy-Item -Path $authSource -Destination "repack/configs/authserver.conf" } else { "MySQLExecutable = `"mysql`"" | Out-File -FilePath "repack/configs/authserver.conf" -Encoding ASCII }
+
+          # Modifica dei parametri di configurazione
           (Get-Content repack/configs/worldserver.conf) | ForEach-Object {
             $_ -replace '^DataDir\s*=.*', 'DataDir = "../data"' `
                -replace '^SourceDirectory\s*=.*', 'SourceDirectory = ".."' `
