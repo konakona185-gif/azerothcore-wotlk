@@ -5,18 +5,58 @@ on:
 
 jobs:
   build:
-    runs-on: windows-2022
+    runs-on: windows-latest
+
+    env:
+      BOOST_ROOT: C:\local\boost_1_87_0
 
     steps:
       - name: Checkout AzerothCore (Official Master)
         uses: actions/checkout@v4
 
-      - name: Install official dependencies via vcpkg
+      # 1. Recupero della Cache interna di GitHub per non riscaricare ogni volta 350 MB
+      - name: Cache Boost & MySQL
+        uses: actions/cache@v4
+        with:
+          path: |
+            C:\local\boost_1_87_0
+            C:\tools\mysql\current
+          key: winbuild-deps:boost-1.87.0:mysql-8.4.9
+
+      # 2. Configurazione ufficiale dell'ambiente di sistema preso dai programmatori del Core
+      - name: Configure OS and Dependencies
         shell: pwsh
         run: |
-          Write-Host "Installazione rapida delle librerie native..."
-          # TRUCCHETTO: Usiamo vcpkg in modalita' locale per saltare download esterni e aggiornamenti infiniti
-          C:\vcpkg\vcpkg.exe install boost-system openssl --triplet x64-windows
+          $ErrorActionPreference = 'Stop'
+
+          # --- Installazione di Boost 1.87.0 ufficiale ---
+          if (-not (Test-Path 'C:\local\boost_1_87_0\boost')) {
+              Write-Host "Download e installazione di Boost in corso..."
+              $boostExe = Join-Path $env:RUNNER_TEMP 'boost.exe'
+              Invoke-WebRequest -Uri 'https://master.dl.sourceforge.net/project/boost/boost-binaries/1.87.0/boost_1_87_0-msvc-14.3-64.exe?viasf=1' -OutFile $boostExe
+              Start-Process -FilePath $boostExe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/DIR=C:\local\boost_1_87_0' -Wait
+          } else {
+              Write-Host "Boost recuperato con successo dalla Cache di GitHub!"
+          }
+
+          # --- Installazione delle librerie client di MySQL 8.4 ufficiali ---
+          if (-not (Test-Path 'C:\tools\mysql\current\lib\mysqlclient.lib')) {
+              Write-Host "Download e configurazione del client MySQL..."
+              $mysqlZip = Join-Path $env:RUNNER_TEMP 'mysql.zip'
+              Invoke-WebRequest -Uri 'https://cdn.mysql.com/archives/mysql-8.4/mysql-8.4.9-winx64.zip' -OutFile $mysqlZip -UserAgent 'Mozilla/5.0'
+              New-Item -ItemType Directory -Force -Path 'C:\tools\mysql' | Out-Null
+              Expand-Archive -Path $mysqlZip -DestinationPath 'C:\tools\mysql' -Force
+              if (Test-Path 'C:\tools\mysql\current') { Remove-Item -Recurse -Force 'C:\tools\mysql\current' }
+              Rename-Item 'C:\tools\mysql\mysql-8.4.9-winx64' 'C:\tools\mysql\current'
+          } else {
+              Write-Host "Librerie MySQL recuperate con successo dalla Cache di GitHub!"
+          }
+
+          # --- Configurazione di OpenSSL gia' presente sul sistema ---
+          $opensslRoot = @($env:OPENSSL_ROOT_DIR, 'C:\Program Files\OpenSSL', 'C:\Program Files\OpenSSL-Win64') |
+              Where-Object { $_ -and (Test-Path (Join-Path $_ 'include\openssl\opensslv.h')) } |
+              Select-Object -First 1
           
-          # Diciamo a GitHub dove trovare le librerie per quando compileremo
-          echo "CMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake" >> $env:GITHUB_ENV
+          if (-not $opensslRoot) { throw 'Nessuna installazione di OpenSSL trovata nel sistema.' }
+          "OPENSSL_ROOT_DIR=$opensslRoot" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "Uso di OpenSSL impostato nel percorso: $opensslRoot"
