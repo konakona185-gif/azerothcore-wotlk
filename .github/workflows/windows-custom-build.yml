@@ -44,10 +44,45 @@ jobs:
             -DMYSQL_LIBRARY="$mysqlSdkPath\lib\libmysql.lib" `
             -DLUA_SYSTEM_BINARIES=ON
 
-      # 3. NUOVO - Compilazione C++ effettiva del Core e dei tuoi Moduli in modalita' Release
+      # 3. Compilazione C++ effettiva del Core e dei tuoi Moduli (GIA' VERDE ✅)
       - name: Build Core and Tools
         shell: pwsh
         run: |
           Write-Host "Avvio della compilazione C++ (Attendi qualche minuto)..."
           cd build
           cmake --build . --config Release --parallel 4
+
+      # 4. NUOVO - Costruzione millimetrica della cartella Repack e recupero di TUTTI i file .conf.dist (Server e Moduli)
+      - name: Structure Repack and Extract Configs
+        shell: pwsh
+        run: |
+          Write-Host "Creazione dello scheletro delle cartelle..."
+          mkdir repack
+          mkdir repack/bin
+          mkdir repack/data
+          mkdir repack/sql
+          mkdir repack/configs
+          mkdir repack/database
+
+          Write-Host "Copia degli eseguibili reali e dei .conf.dist del server..."
+          Copy-Item "build/bin/Release/*.exe" -Destination "repack/bin/"
+          Copy-Item "build/bin/Release/*.conf.dist" -Destination "repack/bin/"
+
+          Write-Host "Scansione e recupero di tutti i file .conf.dist dei moduli..."
+          # Cerchiamo in modo dinamico ogni file .conf.dist dentro le cartelle dei moduli e lo copiamo in configs/
+          Get-ChildItem -Path "modules" -Filter "*.conf.dist" -Recurse | ForEach-Object {
+              Write-Host "-> Trovata configurazione modulo: $($_.Name)"
+              Copy-Item -Path $_.FullName -Destination "repack/configs/" -Force
+          }
+
+      # 5. NUOVO - Estrazione del motore MySQL portatile di sistema
+      - name: Extract Portable Database Engine from System
+        shell: pwsh
+        run: |
+          Write-Host "Copia dei file binari del database di sistema..."
+          if (Test-Path "C:\Program Files\MySQL\MySQL Server 8.0") {
+              Copy-Item -Path "C:\Program Files\MySQL\MySQL Server 8.0\**\*" -Destination "repack/database/" -Recurse -Force -ErrorAction SilentlyContinue
+          } else {
+              choco install mariadb -y --no-progress
+              Copy-Item -Path "C:\Program Files\MariaDB*\*" -Destination "repack/database/" -Recurse -Force -ErrorAction SilentlyContinue
+          }
