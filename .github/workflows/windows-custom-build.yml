@@ -24,15 +24,6 @@ jobs:
       - name: Configure CMake (Core & Tools)
         shell: pwsh
         run: |
-          # INTEGRZIONE PATCH LUA: Cambiamo l'indirizzo del server bloccato di lua.org con un mirror funzionante su GitHub Releases
-          $cmakeFile = "modules/mod-ale/src/CMakeLists.txt"
-          if (Test-Path $cmakeFile) {
-              (Get-Content $cmakeFile) | ForEach-Object {
-                  $_ -replace 'https://lua.org', 'https://github.com'
-              } | Set-Content $cmakeFile
-              Write-Host "Patch del link di Lua applicata correttamente!"
-          }
-
           mkdir build
           cd build
           
@@ -85,14 +76,14 @@ jobs:
           "CREATE DATABASE IF NOT EXISTS acore_auth;" | Out-File -FilePath "auth_database.sql" -Encoding ASCII
           "CREATE DATABASE IF NOT EXISTS acore_characters;" | Out-File -FilePath "characters_database.sql" -Encoding ASCII
           
-          # STRATEGIA DI CHATGPT: Scarichiamo l'intero archivio degli schemi suddivisi della repository consigliata
+          # STRATEGIA CHATGPT: Scarichiamo l'archivio degli schemi suddivisi della repository consigliata
           Write-Host "Scaricamento dei file di testo del database World..."
           curl.exe -L -o "database_world.zip" "https://github.com"
           
           Write-Host "Estrazione degli schemi del mondo..."
           7z.exe x database_world.zip -y
           
-          # Spostiamo i file .sql spacchettati nella cartella sql/ del repack per l'auto-importazione successiva
+          # Spostiamo i file .sql nella cartella principale sql/ per l'auto-importazione sul PC
           if (Test-Path "database-wotlk-master/sql") {
               Copy-Item -Path "database-wotlk-master/sql/**/*.sql" -Destination "." -Force -ErrorAction SilentlyContinue
           }
@@ -155,7 +146,7 @@ jobs:
       - name: Auto-Configure Config Files
         shell: pwsh
         run: |
-          # STRATEGIA DI COPIA COMPLETA ED INFALLIBILE (La parte originale intatta del tuo YAML)
+          # STRATEGIA DI COPIA COMPLETA ED INFALLIBILE
           $worldSource = "build/bin/Release/worldserver.conf.dist"
           if (!(Test-Path $worldSource)) { $worldSource = "src/server/worldserver/worldserver.conf.dist" }
           if (Test-Path $worldSource) { Copy-Item -Path $worldSource -Destination "repack/configs/worldserver.conf" } else { "DataDir = `"..`"" | Out-File -FilePath "repack/configs/worldserver.conf" -Encoding ASCII }
