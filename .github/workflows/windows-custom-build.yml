@@ -54,7 +54,7 @@ jobs:
           mkdir repack/configs
           mkdir repack/database
 
-          # CORREZIONE: Copiamo sia gli eseguibili (.exe) sia i file di configurazione base (.conf.dist)
+          # Copia Eseguibili e file di configurazione dist
           Copy-Item "build/bin/Release/*.exe" -Destination "repack/bin/"
           Copy-Item "build/bin/Release/*.conf.dist" -Destination "repack/bin/"
 
@@ -69,14 +69,26 @@ jobs:
               Copy-Item -Path "C:\Program Files\MariaDB*\*" -Destination "repack/database/" -Recurse -Force -ErrorAction SilentlyContinue
           }
 
-      - name: Prepare SQL files for Auto-Import on PC
+      - name: Download Database and Client Data Internally
         shell: pwsh
         run: |
+          # 1. Gestione file SQL locali
           cd repack/sql
-          Write-Host "Generazione locale dei file SQL strutturali..."
           "CREATE DATABASE IF NOT EXISTS acore_auth;" | Out-File -FilePath "auth_database.sql" -Encoding ASCII
           "CREATE DATABASE IF NOT EXISTS acore_characters;" | Out-File -FilePath "characters_database.sql" -Encoding ASCII
-          "Sostituisci questo file con il file .sql estratto dal database World scaricato dal PC" | Out-File -FilePath "custom_world_database.sql" -Encoding ASCII
+          
+          # 2. Download Database World (usando curl nativo per aggirare i blocchi di Invoke-WebRequest)
+          Write-Host "Download del database acore_world..."
+          curl.exe -L -o "world.zip" "https://github.com"
+          7z.exe x world.zip -y
+          Remove-Item world.zip
+          
+          # 3. Download e scompattamento Mappe e DBC puliti
+          cd ../data
+          Write-Host "Download delle mappe di gioco (data.zip)..."
+          curl.exe -L -o "data.zip" "https://github.com"
+          7z.exe x data.zip -y
+          Remove-Item data.zip
 
       - name: Create Auto-Initializer Script for PC
         shell: pwsh
@@ -87,13 +99,6 @@ jobs:
           echo      INIZIALIZZAZIONE AUTOMATICA DEL DATABASE
           echo ===================================================
           cd /d "%~dp0"
-          
-          if not exist sql\custom_world_database.sql (
-              echo ERRORE CRITICO: Non hai inserito il database World!
-              echo Scarica il database dal link fornito e inseriscilo dentro la cartella 'sql' rinominandolo in 'custom_world_database.sql'.
-              pause
-              exit
-          )
           
           if exist database\data\acore_world (
               echo Database gia' inizializzato. Avvio del server MySQL...
