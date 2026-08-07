@@ -11,170 +11,19 @@ jobs:
       - name: Checkout AzerothCore (Official Master)
         uses: actions/checkout@v4
 
-      - name: Install Dependencies via Chocolatey
-        shell: pwsh
-        run: |
-          Write-Host "Installazione rapida delle dipendenze ufficiali..."
-          choco install boost-msvc-14.3 -y --no-progress
-          choco install openssl -y --no-progress
-          
-          echo "BOOST_ROOT=C:\local\boost_1_87_0" >> $env:GITHUB_ENV
-          echo "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" >> $env:GITHUB_ENV
-
-      - name: Configure CMake (Core & Tools)
-        shell: pwsh
-        run: |
-          mkdir build
-          cd build
-          
-          $mysqlSdkPath = Get-ChildItem -Path "C:\Program Files\" -Filter "MySQL Connector *" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
-          if (!$mysqlSdkPath) { $mysqlSdkPath = "C:\Program Files\MySQL\MySQL Server 8.0" }
-          
-          cmake .. `
-            -A x64 `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DTOOLS_BUILD=all `
-            -DSERVERS_BUILD=all `
-            -DMYSQL_INCLUDE_DIR="$mysqlSdkPath\include" `
-            -DMYSQL_LIBRARY="$mysqlSdkPath\lib\libmysql.lib"
-
-      - name: Build Core and Tools
-        shell: pwsh
-        run: |
-          cd build
-          cmake --build . --config Release --parallel 4
-
-      - name: Structure Repack Folder
-        shell: pwsh
-        run: |
-          mkdir repack
-          mkdir repack/bin
-          mkdir repack/data
-          mkdir repack/sql
-          mkdir repack/configs
-          mkdir repack/database
-
-          # Copia Eseguibili reali
-          Copy-Item "build/bin/Release/*.exe" -Destination "repack/bin/"
-
-      - name: Extract Portable Database Engine from System
-        shell: pwsh
-        run: |
-          Write-Host "Copia dei file del database di sistema..."
-          if (Test-Path "C:\Program Files\MySQL\MySQL Server 8.0") {
-              Copy-Item -Path "C:\Program Files\MySQL\MySQL Server 8.0\**\*" -Destination "repack/database/" -Recurse -Force -ErrorAction SilentlyContinue
-          } else {
-              choco install mariadb -y --no-progress
-              Copy-Item -Path "C:\Program Files\MariaDB*\*" -Destination "repack/database/" -Recurse -Force -ErrorAction SilentlyContinue
-          }
-
-      - name: Implement ChatGPT Strategy (Download database-wotlk files)
-        shell: pwsh
-        run: |
-          cd repack/sql
-          Write-Host "Generazione locale degli schemi minimi..."
-          "CREATE DATABASE IF NOT EXISTS acore_auth;" | Out-File -FilePath "auth_database.sql" -Encoding ASCII
-          "CREATE DATABASE IF NOT EXISTS acore_characters;" | Out-File -FilePath "characters_database.sql" -Encoding ASCII
-          
-          # STRATEGIA CHATGPT: Scarichiamo l'archivio degli schemi suddivisi della repository consigliata
-          Write-Host "Scaricamento dei file di testo del database World..."
-          curl.exe -L -o "database_world.zip" "https://github.com"
-          
-          Write-Host "Estrazione degli schemi del mondo..."
-          7z.exe x database_world.zip -y
-          
-          # Spostiamo i file .sql nella cartella principale sql/ per l'auto-importazione sul PC
-          if (Test-Path "database-wotlk-master/sql") {
-              Copy-Item -Path "database-wotlk-master/sql/**/*.sql" -Destination "." -Force -ErrorAction SilentlyContinue
-          }
-          Remove-Item database_world.zip
-
-      - name: Create Auto-Initializer Script for PC
-        shell: pwsh
-        run: |
-          $batContent = @"
-          @echo off
-          echo ===================================================
-          echo      INIZIALIZZAZIONE AUTOMATICA DEL DATABASE
-          echo ===================================================
-          cd /d "%~dp0"
-          
-          if exist database\data\acore_world (
-              echo Database gia' inizializzato. Avvio del server MySQL...
-              start "" "database\bin\mysqld.exe" --datadir=..\data --port=3306
-              exit /b
-          )
-          
-          echo Inizializzazione delle cartelle dati di MySQL...
-          start /wait "" "database\bin\mysqld.exe" --initialize-insecure --datadir=..\data
-          
-          echo Avvio temporaneo del database...
-          start "" "database\bin\mysqld.exe" --datadir=..\data --skip-grant-tables --port=3306
-          timeout /t 5 /nobreak > nul
-          
-          echo Creazione dei Database puliti...
-          database\bin\mysql.exe --port=3306 -e "CREATE DATABASE IF NOT EXISTS acore_auth; CREATE DATABASE IF NOT EXISTS acore_characters; CREATE DATABASE IF NOT EXISTS acore_world;"
-          
-          echo Importazione dei file SQL base...
-          database\bin\mysql.exe --port=3306 acore_auth < sql\auth_database.sql
-          database\bin\mysql.exe --port=3306 acore_characters < sql\characters_database.sql
-          
-          echo Importazione massiva di tutti gli schemi World (Attendi qualche secondo)...
-          cd sql
-          for /r %%f in (*.sql) do (
-              if not "%%~nxf"=="auth_database.sql" if not "%%~nxf"=="characters_database.sql" (
-                  ..\database\bin\mysql.exe --port=3306 acore_world < "%%f"
-              )
-          )
-          cd ..
-          
-          echo ===================================================
-          echo   DATABASE PRONTO! Puoi avviare authserver e worldserver.
-          echo ===================================================
-          pause
-          "@
-          $batContent | Out-File -FilePath "repack/1-Clic-Avvia-Database.bat" -Encoding ASCII
-
-      - name: Deploy DLLs (MySQL & OpenSSL)
-        shell: pwsh
-        run: |
-          Copy-Item -Path "C:\Program Files\OpenSSL\bin\libcrypto-*.dll" -Destination "repack/bin/" -ErrorAction SilentlyContinue
-          Copy-Item -Path "C:\Program Files\OpenSSL\bin\libssl-*.dll" -Destination "repack/bin/" -ErrorAction SilentlyContinue
-          $mysqlDll = Get-ChildItem -Path "C:\Program Files\" -Filter "libmysql.dll" -Recurse | Select-Object -First 1 -ExpandProperty FullName
-          if ($mysqlDll) { Copy-Item -Path $mysqlDll -Destination "repack/bin/" }
-
-      - name: Auto-Configure Config Files
-        shell: pwsh
-        run: |
-          # STRATEGIA DI COPIA COMPLETA ED INFALLIBILE
-          $worldSource = "build/bin/Release/worldserver.conf.dist"
-          if (!(Test-Path $worldSource)) { $worldSource = "src/server/worldserver/worldserver.conf.dist" }
-          if (Test-Path $worldSource) { Copy-Item -Path $worldSource -Destination "repack/configs/worldserver.conf" } else { "DataDir = `"..`"" | Out-File -FilePath "repack/configs/worldserver.conf" -Encoding ASCII }
-
-          $authSource = "build/bin/Release/authserver.conf.dist"
-          if (!(Test-Path $authSource)) { $authSource = "src/server/authserver/authserver.conf.dist" }
-          if (Test-Path $authSource) { Copy-Item -Path $authSource -Destination "repack/configs/authserver.conf" } else { "MySQLExecutable = `"mysql`"" | Out-File -FilePath "repack/configs/authserver.conf" -Encoding ASCII }
-
-          # Modifica dei parametri di configurazione
-          (Get-Content repack/configs/worldserver.conf) | ForEach-Object {
-            $_ -replace '^DataDir\s*=.*', 'DataDir = "../data"' `
-               -replace '^SourceDirectory\s*=.*', 'SourceDirectory = ".."' `
-               -replace '^MySQLExecutable\s*=.*', 'MySQLExecutable = "mysql"' `
-               -replace '^Updates.EnableDatabases\s*=.*', 'Updates.EnableDatabases = 1'
-          } | Set-Content repack/configs/worldserver.conf
-
-          (Get-Content repack/configs/authserver.conf) | ForEach-Object {
-            $_ -replace '^MySQLExecutable\s*=.*', 'MySQLExecutable = "mysql"' `
-               -replace '^Updates.EnableDatabases\s*=.*', 'Updates.EnableDatabases = 1'
-          } | Set-Content repack/configs/authserver.conf
-
-      - name: Compress Repack
-        shell: pwsh
-        run: |
-          Compress-Archive -Path repack/* -DestinationPath azerothcore-repack-windows.zip
-
-      - name: Upload Repack Artifact
-        uses: actions/upload-artifact@v4
+      # 1. Configurazione dello strumento vcpkg ufficiale Microsoft con Cache attiva
+      - name: Setup vcpkg native compiler
+        uses: lukka/run-vcpkg@v11
         with:
-          name: AzerothCore-Windows-Repack
-          path: azerothcore-repack-windows.zip
+          vcpkgDirectory: 'C:/vcpkg'
+          appendedArguments: '--triplet x64-windows'
+
+      # 2. Installazione nativa e pulita delle librerie richieste da AzerothCore
+      - name: Install official dependencies via vcpkg
+        shell: pwsh
+        run: |
+          Write-Host "Installazione nativa delle librerie di base..."
+          C:\vcpkg\vcpkg.exe install boost-system boost-filesystem boost-program-options openssl --triplet x64-windows
+          
+          # Indichiamo a GitHub dove si trova il toolchain di vcpkg per i passaggi futuri
+          echo "CMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake" >> $env:GITHUB_ENV
