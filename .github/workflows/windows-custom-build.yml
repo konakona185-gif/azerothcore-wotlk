@@ -72,11 +72,11 @@ jobs:
         shell: pwsh
         run: |
           cd repack/sql
-          Write-Host "Copia degli schemi SQL di base dal codice sorgente locale..."
+          Write-Host "Generazione locale dei file SQL strutturali..."
           
-          # RISOLUZIONE DEFINITIVA: Copiamo i file direttamente dal disco locale senza passare da internet
-          Copy-Item -Path "../../data/sql/base/auth_database.sql" -Destination "." -Force
-          Copy-Item -Path "../../data/sql/base/characters_database.sql" -Destination "." -Force
+          # Generiamo i file sul posto scrivendoci le query minime di inizializzazione. Il resto lo fara' l'auto-updater di AzerothCore sul tuo PC!
+          "CREATE DATABASE IF NOT EXISTS acore_auth;" | Out-File -FilePath "auth_database.sql" -Encoding ASCII
+          "CREATE DATABASE IF NOT EXISTS acore_characters;" | Out-File -FilePath "characters_database.sql" -Encoding ASCII
           
           Write-Host "Download del database acore_world completo..."
           $worldDbUrl = "https://github.com"
@@ -108,7 +108,7 @@ jobs:
           timeout /t 5 /nobreak > nul
           
           echo Creazione dei Database puliti...
-          database\bin\mysql.exe --port=3306 -e "CREATE DATABASE acore_auth; CREATE DATABASE acore_characters; CREATE DATABASE acore_world;"
+          database\bin\mysql.exe --port=3306 -e "CREATE DATABASE IF NOT EXISTS acore_auth; CREATE DATABASE IF NOT EXISTS acore_characters; CREATE DATABASE IF NOT EXISTS acore_world;"
           
           echo Importazione dei file SQL di AzerothCore (Attendi qualche secondo)...
           database\bin\mysql.exe --port=3306 acore_auth < sql\auth_database.sql
@@ -148,11 +148,13 @@ jobs:
           (Get-Content repack/configs/worldserver.conf) | ForEach-Object {
             $_ -replace '^DataDir\s*=.*', 'DataDir = "../data"' `
                -replace '^SourceDirectory\s*=.*', 'SourceDirectory = ".."' `
-               -replace '^MySQLExecutable\s*=.*', 'MySQLExecutable = "mysql"'
+               -replace '^MySQLExecutable\s*=.*', 'MySQLExecutable = "mysql"' `
+               -replace '^Updates.EnableDatabases\s*=.*', 'Updates.EnableDatabases = 1'
           } | Set-Content repack/configs/worldserver.conf
 
           (Get-Content repack/configs/authserver.conf) | ForEach-Object {
-            $_ -replace '^MySQLExecutable\s*=.*', 'MySQLExecutable = "mysql"'
+            $_ -replace '^MySQLExecutable\s*=.*', 'MySQLExecutable = "mysql"' `
+               -replace '^Updates.EnableDatabases\s*=.*', 'Updates.EnableDatabases = 1'
           } | Set-Content repack/configs/authserver.conf
 
       - name: Compress Repack
