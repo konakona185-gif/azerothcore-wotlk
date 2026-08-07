@@ -73,24 +73,12 @@ jobs:
         run: |
           cd repack/sql
           Write-Host "Generazione locale dei file SQL strutturali..."
-          
+          # Generiamo i file sul posto dal nulla per evitare download bloccati da GitHub
           "CREATE DATABASE IF NOT EXISTS acore_auth;" | Out-File -FilePath "auth_database.sql" -Encoding ASCII
           "CREATE DATABASE IF NOT EXISTS acore_characters;" | Out-File -FilePath "characters_database.sql" -Encoding ASCII
           
-          # RISOLUZIONE DEFINITIVA URL: Usiamo il link ufficiale "latest" che scarica sempre l'ultima versione reale del database World
-          Write-Host "Download del database acore_world aggiornato ufficiale..."
-          $worldDbUrl = "https://github.com"
-          Invoke-WebRequest -Uri $worldDbUrl -OutFile "world.zip"
-          
-          # Estrazione controllata
-          7z.exe x world.zip -y
-          Remove-Item world.zip
-          
-          # Rinominiamo il file estratto in un nome standard per far funzionare lo script .bat sul tuo PC
-          $extractedSql = Get-ChildItem -Filter "*.sql" | Select-Object -First 1
-          if ($extractedSql) {
-              Rename-Item -Path $extractedSql.FullName -NewName "custom_world_database.sql"
-          }
+          Write-Host "Istruzioni per il database World inserite nel repack."
+          "Sostituisci questo file con il file .sql estratto dal database World scaricato dal PC" | Out-File -FilePath "custom_world_database.sql" -Encoding ASCII
 
       - name: Create Auto-Initializer Script for PC
         shell: pwsh
@@ -101,6 +89,13 @@ jobs:
           echo      INIZIALIZZAZIONE AUTOMATICA DEL DATABASE
           echo ===================================================
           cd /d "%~dp0"
+          
+          if not exist sql\custom_world_database.sql (
+              echo ERRORE CRITICO: Non hai inserito il database World!
+              echo Scarica il database dal link fornito e inseriscilo dentro la cartella 'sql' rinominandolo in 'custom_world_database.sql'.
+              pause
+              exit
+          )
           
           if exist database\data\acore_world (
               echo Database gia' inizializzato. Avvio del server MySQL...
@@ -129,15 +124,6 @@ jobs:
           pause
           "@
           $batContent | Out-File -FilePath "repack/1-Clic-Avvia-Database.bat" -Encoding ASCII
-
-      - name: Download and Extract Client Data (DBC, Maps, VMaps, MMaps)
-        shell: pwsh
-        run: |
-          $url = "https://github.com"
-          $output = "repack/data/data.zip"
-          Invoke-WebRequest -Uri $url -OutFile $output
-          7z.exe x $output -orepack/data/ -y
-          Remove-Item $output
 
       - name: Deploy DLLs (MySQL & OpenSSL)
         shell: pwsh
