@@ -72,14 +72,11 @@ jobs:
         shell: pwsh
         run: |
           cd repack/sql
-          Write-Host "Download degli schemi SQL ufficiali di AzerothCore..."
+          Write-Host "Copia degli schemi SQL di base dal codice sorgente locale..."
           
-          # RISOLUZIONE URL: Usiamo i link nativi e completi di GitHub per evitare i vecchi refusi
-          $authUrl = "https://githubusercontent.com"
-          $charUrl = "https://githubusercontent.com"
-          
-          Invoke-WebRequest -Uri $authUrl -OutFile "auth_database.sql"
-          Invoke-WebRequest -Uri $charUrl -OutFile "characters_database.sql"
+          # RISOLUZIONE DEFINITIVA: Copiamo i file direttamente dal disco locale senza passare da internet
+          Copy-Item -Path "../../data/sql/base/auth_database.sql" -Destination "." -Force
+          Copy-Item -Path "../../data/sql/base/characters_database.sql" -Destination "." -Force
           
           Write-Host "Download del database acore_world completo..."
           $worldDbUrl = "https://github.com"
