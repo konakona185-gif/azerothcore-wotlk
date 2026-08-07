@@ -11,22 +11,20 @@ jobs:
       - name: Checkout AzerothCore (Official Master)
         uses: actions/checkout@v4
 
-      # 1. Installazione di TUTTE le librerie tramite Chocolatey (Incluso Lua per saltare i download)
+      # 1. Installazione delle librerie e di Lua (GIA' VERDE ✅)
       - name: Install official dependencies via Chocolatey
         shell: pwsh
         run: |
           Write-Host "Installazione dei components ufficiali di fabbrica e di Lua..."
           choco install boost-msvc-14.3 -y --no-progress
           choco install openssl -y --no-progress
-          
-          # TRUCCHETTO: Installiamo Lua nel sistema operativo per non farlo scaricare a CMake
           choco install lua51 -y --no-progress
           
           echo "BOOST_ROOT=C:\local\boost_1_87_0" >> $env:GITHUB_ENV
           echo "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" >> $env:GITHUB_ENV
           echo "LUA_DIR=C:\tools\lua51" >> $env:GITHUB_ENV
 
-      # 2. Generazione dei file con CMake dicendogli di USARE il Lua di sistema appena installato
+      # 2. Generazione dei file con CMake (GIA' VERDE ✅)
       - name: Configure CMake (Core & Tools)
         shell: pwsh
         run: |
@@ -37,7 +35,6 @@ jobs:
           $mysqlSdkPath = Get-ChildItem -Path "C:\Program Files\" -Filter "MySQL Connector *" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
           if (!$mysqlSdkPath) { $mysqlSdkPath = "C:\Program Files\MySQL\MySQL Server 8.0" }
           
-          # -DLUA_SYSTEM_BINARIES=ON ordina a CMake di usare il Lua locale saltando i link offline!
           cmake .. `
             -A x64 `
             -DCMAKE_BUILD_TYPE=Release `
@@ -46,3 +43,11 @@ jobs:
             -DMYSQL_INCLUDE_DIR="$mysqlSdkPath\include" `
             -DMYSQL_LIBRARY="$mysqlSdkPath\lib\libmysql.lib" `
             -DLUA_SYSTEM_BINARIES=ON
+
+      # 3. NUOVO - Compilazione C++ effettiva del Core e dei tuoi Moduli in modalita' Release
+      - name: Build Core and Tools
+        shell: pwsh
+        run: |
+          Write-Host "Avvio della compilazione C++ (Attendi qualche minuto)..."
+          cd build
+          cmake --build . --config Release --parallel 4
