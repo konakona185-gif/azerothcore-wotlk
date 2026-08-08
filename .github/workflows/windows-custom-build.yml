@@ -52,7 +52,7 @@ jobs:
           cd build
           cmake --build . --config Release --parallel 4
 
-      # 4. NUOVO - Costruzione millimetrica della cartella Repack e recupero di TUTTI i file .conf.dist (Server e Moduli)
+      # 4. Costruzione della cartella Repack e recupero dei .conf.dist (GIA' VERDE ✅)
       - name: Structure Repack and Extract Configs
         shell: pwsh
         run: |
@@ -69,13 +69,12 @@ jobs:
           Copy-Item "build/bin/Release/*.conf.dist" -Destination "repack/bin/"
 
           Write-Host "Scansione e recupero di tutti i file .conf.dist dei moduli..."
-          # Cerchiamo in modo dinamico ogni file .conf.dist dentro le cartelle dei moduli e lo copiamo in configs/
           Get-ChildItem -Path "modules" -Filter "*.conf.dist" -Recurse | ForEach-Object {
               Write-Host "-> Trovata configurazione modulo: $($_.Name)"
               Copy-Item -Path $_.FullName -Destination "repack/configs/" -Force
           }
 
-      # 5. NUOVO - Estrazione del motore MySQL portatile di sistema
+      # 5. Estrazione del motore MySQL portatile di sistema (GIA' VERDE ✅)
       - name: Extract Portable Database Engine from System
         shell: pwsh
         run: |
@@ -86,3 +85,82 @@ jobs:
               choco install mariadb -y --no-progress
               Copy-Item -Path "C:\Program Files\MariaDB*\*" -Destination "repack/database/" -Recurse -Force -ErrorAction SilentlyContinue
           }
+
+      # 6. NUOVO - INTEGRAZIONE STRATEGIA CHATGPT: Scaricamento ed estrazione degli schemi World suddivisi
+      - name: Implement ChatGPT Strategy (Download database-wotlk files)
+        shell: pwsh
+        run: |
+          Write-Host "Scaricamento degli schemi divisi del database World..."
+          cd repack/sql
+          
+          # Generazione dei file SQL strutturali minimi per Auth e Characters
+          "CREATE DATABASE IF NOT EXISTS acore_auth;" | Out-File -FilePath "auth_database.sql" -Encoding ASCII
+          "CREATE DATABASE IF NOT EXISTS acore_characters;" | Out-File -FilePath "characters_database.sql" -Encoding ASCII
+          
+          # Download archivio leggero consigliato da ChatGPT
+          curl.exe -L -o "database_world.zip" "https://github.com"
+          7z.exe x database_world.zip -y
+          
+          # Spostamento di tutti i file .sql estratti nella cartella sql/ principale del repack
+          if (Test-Path "database-wotlk-master/sql") {
+              Copy-Item -Path "database-wotlk-master/sql/**/*.sql" -Destination "." -Force -ErrorAction SilentlyContinue
+          }
+          Remove-Item database_world.zip
+
+      # 7. NUOVO - Generazione del file .bat intelligente per l'importazione massiva sul PC
+      - name: Create Auto-Initializer Script for PC
+        shell: pwsh
+        run: |
+          Write-Host "Generazione del file .bat per l'importazione in 1 clic..."
+          $batContent = @"
+          @echo off
+          echo ===================================================
+          echo      INIZIALIZZAZIONE AUTOMATICA DEL DATABASE
+          echo ===================================================
+          cd /d "%~dp0"
+          
+          if exist database\data\acore_world (
+              echo Database gia' inizializzato. Avvio del server MySQL...
+              start "" "database\bin\mysqld.exe" --datadir=..\data --port=3306
+              exit /b
+          )
+          
+          echo Inizializzazione delle cartelle dati di MySQL...
+          start /wait "" "database\bin\mysqld.exe" --initialize-insecure --datadir=..\data
+          
+          echo Avvio temporaneo del database...
+          start "" "database\bin\mysqld.exe" --datadir=..\data --skip-grant-tables --port=3306
+          timeout /t 5 /nobreak > nul
+          
+          echo Creazione dei Database puliti...
+          database\bin\mysql.exe --port=3306 -e "CREATE DATABASE IF NOT EXISTS acore_auth; CREATE DATABASE IF NOT EXISTS acore_characters; CREATE DATABASE IF NOT EXISTS acore_world;"
+          
+          echo Importazione dei file SQL base...
+          database\bin\mysql.exe --port=3306 acore_auth < sql\auth_database.sql
+          database\bin\mysql.exe --port=3306 acore_characters < sql\characters_database.sql
+          
+          echo Importazione massiva di tutti gli schemi World divisi di ChatGPT (Attendi)...
+          cd sql
+          for /r %%f in (*.sql) do (
+              if not "%%~nxf"=="auth_database.sql" if not "%%~nxf"=="characters_database.sql" (
+                  ..\database\bin\mysql.exe --port=3306 acore_world < "%%f"
+              )
+          )
+          cd ..
+          
+          echo ===================================================
+          echo   DATABASE PRONTO! Puoi avviare authserver e worldserver.
+          echo ===================================================
+          pause
+          "@
+          $batContent | Out-File -FilePath "repack/1-Clic-Avvia-Database.bat" -Encoding ASCII
+
+      # 8. NUOVO - Iniezione finale delle DLL (MySQL e OpenSSL) per azzerare gli errori di avvio su Windows
+      - name: Deploy DLLs (MySQL & OpenSSL)
+        shell: pwsh
+        run: |
+          Write-Host "Iniezione delle librerie .dll nella cartella bin..."
+          Copy-Item -Path "C:\Program Files\OpenSSL\bin\libcrypto-*.dll" -Destination "repack/bin/" -ErrorAction SilentlyContinue
+          Copy-Item -Path "C:\Program Files\OpenSSL\bin\libssl-*.dll" -Destination "repack/bin/" -ErrorAction SilentlyContinue
+          $mysqlDll = Get-ChildItem -Path "C:\Program Files\" -Filter "libmysql.dll" -Recurse | Select-Object -First 1 -ExpandProperty FullName
+          if ($mysqlDll) { Copy-Item -Path $mysqlDll -Destination "repack/bin/" }
