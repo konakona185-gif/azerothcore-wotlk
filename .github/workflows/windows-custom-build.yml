@@ -86,28 +86,17 @@ jobs:
               Copy-Item -Path "C:\Program Files\MariaDB*\*" -Destination "repack/database/" -Recurse -Force -ErrorAction SilentlyContinue
           }
 
-      # 6. NUOVO - INTEGRAZIONE STRATEGIA CHATGPT: Scaricamento ed estrazione degli schemi World suddivisi
-      - name: Implement ChatGPT Strategy (Download database-wotlk files)
+      # 6. SISTEMAZIONE STRATEGIA: Generazione locale e pulita dei database (Zero download bloccati)
+      - name: Prepare SQL Structures Locally
         shell: pwsh
         run: |
-          Write-Host "Scaricamento degli schemi divisi del database World..."
+          Write-Host "Generazione locale degli schemi strutturali minimi..."
           cd repack/sql
-          
-          # Generazione dei file SQL strutturali minimi per Auth e Characters
           "CREATE DATABASE IF NOT EXISTS acore_auth;" | Out-File -FilePath "auth_database.sql" -Encoding ASCII
           "CREATE DATABASE IF NOT EXISTS acore_characters;" | Out-File -FilePath "characters_database.sql" -Encoding ASCII
-          
-          # Download archivio leggero consigliato da ChatGPT
-          curl.exe -L -o "database_world.zip" "https://github.com"
-          7z.exe x database_world.zip -y
-          
-          # Spostamento di tutti i file .sql estratti nella cartella sql/ principale del repack
-          if (Test-Path "database-wotlk-master/sql") {
-              Copy-Item -Path "database-wotlk-master/sql/**/*.sql" -Destination "." -Force -ErrorAction SilentlyContinue
-          }
-          Remove-Item database_world.zip
+          "ℹ️ Incolla qui dentro il database del mondo scaricato fuori mano!" | Out-File -FilePath "LEGGIMI_INSERISCI_QUI_IL_DATABASE_WORLD.txt" -Encoding ASCII
 
-      # 7. NUOVO - Generazione del file .bat intelligente per l'importazione massiva sul PC
+      # 7. Generazione del file .bat intelligente per l'importazione massiva sul PC
       - name: Create Auto-Initializer Script for PC
         shell: pwsh
         run: |
@@ -139,10 +128,11 @@ jobs:
           database\bin\mysql.exe --port=3306 acore_auth < sql\auth_database.sql
           database\bin\mysql.exe --port=3306 acore_characters < sql\characters_database.sql
           
-          echo Importazione massiva di tutti gli schemi World divisi di ChatGPT (Attendi)...
+          echo Importazione massiva di tutti gli schemi .sql presenti nella cartella sql...
           cd sql
           for /r %%f in (*.sql) do (
               if not "%%~nxf"=="auth_database.sql" if not "%%~nxf"=="characters_database.sql" (
+                  echo Importazione del file: %%~nxf ...
                   ..\database\bin\mysql.exe --port=3306 acore_world < "%%f"
               )
           )
@@ -155,7 +145,7 @@ jobs:
           "@
           $batContent | Out-File -FilePath "repack/1-Clic-Avvia-Database.bat" -Encoding ASCII
 
-      # 8. NUOVO - Iniezione finale delle DLL (MySQL e OpenSSL) per azzerare gli errori di avvio su Windows
+      # 8. Iniezione finale delle DLL (MySQL e OpenSSL)
       - name: Deploy DLLs (MySQL & OpenSSL)
         shell: pwsh
         run: |
@@ -164,3 +154,17 @@ jobs:
           Copy-Item -Path "C:\Program Files\OpenSSL\bin\libssl-*.dll" -Destination "repack/bin/" -ErrorAction SilentlyContinue
           $mysqlDll = Get-ChildItem -Path "C:\Program Files\" -Filter "libmysql.dll" -Recurse | Select-Object -First 1 -ExpandProperty FullName
           if ($mysqlDll) { Copy-Item -Path $mysqlDll -Destination "repack/bin/" }
+
+      # 9. COMPRESSIONE FINALE: Creazione dello ZIP pronto da scaricare
+      - name: Compress Repack
+        shell: pwsh
+        run: |
+          Write-Host "Compressione dell'artefatto finale in corso..."
+          Compress-Archive -Path repack/* -DestinationPath azerothcore-repack-windows.zip
+
+      # 10. CARICAMENTO ARTEFATTO: Invio del pacchetto pronto nella scheda Actions
+      - name: Upload Repack Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AzerothCore-Windows-Repack
+          path: azerothcore-repack-windows.zip
