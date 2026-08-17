@@ -70,10 +70,8 @@ jobs:
           mkdir repack/database
           Copy-Item "build/bin/Release/*.exe" -Destination "repack/bin/"
           
-          Copy-Item "conf/dist/worldserver.conf.dist" -Destination "repack/configs/worldserver.conf.dist"
-          Copy-Item "conf/dist/authserver.conf.dist" -Destination "repack/configs/authserver.conf.dist"
-          
-          Get-ChildItem -Path "modules" -Filter "*.conf.dist" -Recurse | ForEach-Object {
+          # CERCA E COPIA TUTTI I .CONF.DIST DEL SERVER E DEI MODULI OVUNQUE ESSI SIANO
+          Get-ChildItem -Path . -Filter "*.conf.dist" -Recurse | ForEach-Object {
               Copy-Item -Path $_.FullName -Destination "repack/configs/" -Force
           }
 
