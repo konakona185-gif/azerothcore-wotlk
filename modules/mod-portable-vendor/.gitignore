@@ -1,0 +1,27 @@
+# Generic
+.directory
+*.orig
+*.rej
+*.*~
+*.DS_Store
+CMakeLists.txt.user
+*.bak
+*.patch
+*.diff
+
+# IDE
+/.settings/
+nbproject/
+*.kate-swp
+*.swp
+*~.nib
+
+# Build artifacts
+/build/
+*.o
+*.a
+*.so
+
+# Config (only distribute .dist templates)
+conf/*.conf
+!conf/*.conf.dist

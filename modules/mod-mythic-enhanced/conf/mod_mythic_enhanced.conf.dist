@@ -1,0 +1,81 @@
+#
+# Credits: silviu20092
+#
+
+[worldserver]
+
+########################################
+# Mythic Plus configuration
+########################################
+#
+#    MythicPlus.Enable
+#        Description: Enable or disable the system. This config is not hot-reloadable.
+#        Default:     0 - Disabled
+#                     1 - Enabled
+#
+
+MythicPlus.Enable = 1
+
+#
+#    MythicPlus.Penalty.OnDeath
+#        Description: Time (in seconds) that applies as penalty whenever a player dies inside M+
+#        Values:      0  - no penalty
+#                     >0 - value in seconds
+#        Default:     5 - subtracts 5 seconds from the timer (retail-style baseline)
+#
+
+MythicPlus.Penalty.OnDeath = 5
+
+#
+#    MythicPlus.KeystoneBuyTimer
+#        Description: Limits the buying of Mythic Keystones from the NPC. This value is in minutes.
+#        Values:      0    - no limit, players can buy the keystone whenever they want
+#                     60   - players can buy a keystone once every 60 minutes
+#        Default:     1440 - can buy the keystone once per day
+#
+
+MythicPlus.KeystoneBuyTimer = 1440
+
+#
+#    MythicPlus.DropKeystoneOnDungeonComplete
+#        Description: Drops a Mythic Keystone for each player when the M+ dungeon was completed (players must beat the timer though)
+#        Values: 0 or 1
+#        Default: 1 - drop the keystone
+#
+
+MythicPlus.DropKeystoneOnDungeonComplete = 1
+
+#
+#    MythicPlus.ItemUpgradeTokenEntry
+#        Description: Item entry granted to every player in the instance when a Mythic+ dungeon boss
+#                     is killed (dungeon bosses and configured final bosses). Set to 0 to disable.
+#                     Use the same item entry in mod-item-upgrade where you charge items (for example
+#                     ItemUpgrade.DefaultStatCostItemEntry, per-stat rows in mod_item_upgrade_stats_req
+#                     with req_type item, ItemUpgrade.UpgradeWeaponDamageToken, etc.). There is no
+#                     separate Mythic-only key in mod-item-upgrade.
+#        Default:     0 - disabled
+#
+
+MythicPlus.ItemUpgradeTokenEntry = 0
+
+#
+#    MythicPlus.ItemUpgradeTokenCount
+#        Description: Base number of ItemUpgradeTokenEntry to give per boss kill (when enabled).
+#                     Actual rewards scale by Mythic key tier:
+#                     +2 to +9   = base x1
+#                     +10 to +14 = base x2
+#                     +15 to +19 = base x3
+#                     +20        = base x4
+#        Default:     1
+#
+
+MythicPlus.ItemUpgradeTokenCount = 1
+
+#
+#    MythicPlus.ItemUpgradeTokenSkipFinalBoss
+#        Description: If 1, do not grant ItemUpgradeToken on the final boss kill (use when completion
+#                     rewards in mythic_plus_level_rewards already grant the same token).
+#        Default:     0
+#
+
+MythicPlus.ItemUpgradeTokenSkipFinalBoss = 0
